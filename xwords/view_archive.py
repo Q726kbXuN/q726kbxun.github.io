@@ -73,6 +73,59 @@ def show_puzzles():
                     total += 1
                     print(f"Number: {total:,}, Source: {xword}, Puzzle: {year}-{month}-{puz}")
 
+def output_puzzle(xword, year, month, puz, data, f):
+    # The data format is simply:
+    # data[0]: width
+    # data[1]: height
+    # data[2]: The cells, an array of arrays, each value is a string, or 0 for blocks
+    # data[3]: An array of clues, see below
+    # data[4]: (optional) True if this data is problematic (won't survive a trip to a .puz encoder)
+    # data[5]: (optional) The puzzle type, either "", "acrostic", or "diagramless"
+
+    # The clue format
+    # clue[0]: String of the clue
+    # clue[1]: Category, 0 is Across, and 1 is Down
+    # clue[2]: The number of this clue
+    # clue[3 ... x]: A list of the x, y locations of each cell for this clue
+
+    # Simple text view of a scrossword
+    block_left = "\u2590"
+    block_mid = "\u2588"
+    block_right = "\u258c"
+
+    # Dump out the name first
+    f.write(f"{xword}\n{year}-{month}-{puz}\n\n")
+
+    # Run through each row of the crossword
+    for y in range(data[1]):
+        # Build up this row of the crossword
+        row = " "
+        for x in range(data[0]):
+            if data[2][y][x] == 0:
+                row += "# "
+            else:
+                row += data[2][y][x][0] + " "
+        # Replace the "#" blocks with ASCII art
+        for x in range(len(row), 0, -1):
+            row = row.replace(" " + "# " * x, block_left + block_mid.join([block_mid] * x) + block_right)
+
+        # Dump out the row
+        f.write(f"{row}\n")
+
+    # And now dump out the clues
+    for dir_num, dir_desc in ((0, "Across"), (1, "Down")):
+        need_header = True
+        for cur in data[3]:
+            if cur[1] == dir_num:
+                if need_header:
+                    # First clue in this section, so a header
+                    f.write(f"\n{dir_desc}:\n")
+                    need_header = False
+                # And just show the clue
+                f.write(f"{cur[2]}: {cur[0]}\n")
+
+    f.write("\n")
+
 @cmd("dump_all", 0, "= Download and dump out all puzzles")
 def dump_all_puzzles():
     # Note that this will write out around 1.5gb of data
@@ -93,14 +146,22 @@ def dump_all_puzzles():
                     dn = os.path.join("puzzles", xword, year, month)
                     if not os.path.isdir(dn):
                         os.makedirs(dn)
-                    fn = os.path.join(dn, f"{year}-{month}-{puz}.json")
+                    fn_json = os.path.join(dn, f"{year}-{month}-{puz}.json")
+                    fn_txt = os.path.join(dn, f"{year}-{month}-{puz}.txt")
 
                     # And pull down the data and write it out
-                    with open(fn, "wt", newline="", encoding="utf-8") as f:
-                        # Using cache here so only the first load for each num hits the internet
-                        data = get_data(*info, mode='gzip', header=header, cache=True)
+                    # Using cache here so only the first load for each num hits the internet
+                    data = get_data(*info, mode='gzip', header=header, cache=True)
+
+                    # Write out a JSON dumnp
+                    with open(fn_json, "wt", newline="", encoding="utf-8") as f:
                         json.dump(data, f, indent=4)
-                    print(f"Wrote {fn}")
+                    
+                    with open(fn_txt, "wt", newline="", encoding="utf-8") as f:
+                        output_puzzle(xword, year, month, puz, data, f)
+
+                    # Write out a simple text version
+                    print(f"Wrote {fn_json}/.txt")
 
 def main():
     # Dirt simple TUI
