@@ -128,7 +128,7 @@ def output_puzzle(xword, year, month, puz, data, f):
 
 @cmd("dump_all", 0, "= Download and dump out all puzzles")
 def dump_all_puzzles():
-    # Note that this will write out around 1.5gb of data
+    # Note that this will write out around 1.7gb of data
 
     # Get the meta data
     meta = get_data(0, 22, 78)
@@ -161,7 +161,7 @@ def dump_all_puzzles():
                         output_puzzle(xword, year, month, puz, data, f)
 
                     # Write out a simple text version
-                    print(f"Wrote {fn_json}/.txt")
+                    print(f"Wrote {fn_json} & .txt")
 
 def main():
     # Dirt simple TUI
