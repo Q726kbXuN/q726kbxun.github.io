@@ -1,26 +1,211 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Images</title>
-    <style>
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Images</title>
+<style>
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+input[type="text"] {
+    color: #F8F7F3;
+    background-color: #3f3f3f;
+}
+input[type="text"]::placeholder {
+    color: #aaa;
+    opacity: 1;
+}        
+body {
+    color: #ccc;
+    background-color: #252523;
+}
+a {
+    color: #bbf;
+    text-decoration: none;
+}
+a:hover {
+    color: #bbf;
+    text-decoration: underline;
+}
+.entry {
+    padding: 10px;
+}
+.gallery {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 30px;
+    margin: 0 auto;
+}        
+.gallery-item {
+    width: 300px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background-color: #444;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+.gallery-item:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+}
+.image-container {
+    width: 100%;
+    height: 300px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+    background-color: #333;
+}
+.gallery-item img {
+    max-width: 300px;
+    max-height: 300px;
+    object-fit: contain;
+    display: block;
+    margin: 0 auto;
+}
+.caption {
+    padding: 15px;
+    text-align: center;
+    font-size: 16px;
+    width: 100%;
+}
+.clickable {
+    color: #bbf;
+    text-decoration: none;
+    cursor: pointer;
+}
+.clickable:hover {
+    color: #bbf;
+    text-decoration: underline;
+}
+@media (max-width: 768px) {
+    .gallery {
+        gap: 20px;
+    }            
+    .gallery-item {
+        width: 100%;
+        max-width: 300px;
+    }
+}
+</style>
+<script>
+let textInput;
+let output;
+let items;
+
+async function loadData(url) {
+    const response = await fetch(url);
+    if (!response.ok) {
+        throw new Error(`HTTP error! Status: ${response.status}`);
+    }
+    const compressedData = await response.arrayBuffer();
+    const decompressStream = new DecompressionStream('gzip');
+    const compressedStream = new Blob([compressedData]).stream();
+    const decompressedStream = compressedStream.pipeThrough(decompressStream);
+    const decompressedResponse = await new Response(decompressedStream).arrayBuffer();
+    const jsonString = new TextDecoder().decode(decompressedResponse);
+    return JSON.parse(jsonString);
+}
+
+function escapeHTML(str) {
+    if (!str) {
+        return '';
+    }
+
+    const htmlEntities = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;',
+        '/': '&#x2F;',
+        '`': '&#x60;',
+        '=': '&#x3D;'
+    };
+
+    return String(str).replace(/[&<>"'`=\/]/g, function(char) {
+        return htmlEntities[char];
+    });
+}
+
+function handleSubmit(text) {
+    let temp = '';
+    text = text.toLowerCase();
+    for (const cur of items) {
+        let show = false;
+        if (text == "") {
+            show = true;
+        } else {
+            if (!show) {
+                for (const key in cur['keys']) {
+                    if (key.toLowerCase().includes(text)) {
+                        show = true;
+                        break;
+                    }
+                }
+            }
+            if (!show) {
+                if (cur['desc'].toLowerCase().includes(text)) {
+                    show = true;
+                }
+            }
         }
-        input[type="text"] {
-            color: #F8F7F3;
-            background-color: #3f3f3f;
+        if (show) {
+            temp += `
+                <div class="gallery-item">
+                    <div class="image-container">
+                        <a target="_blank" href="img/${cur['id']}/${cur['title'].replace(/[^A-Za-z0-9]+/g, '_')}.jpg"><img 
+                        loading="lazy" src="preview/${cur['id']}.jpg" width="${cur["w"]}" 
+                        height="${cur["h"]}"></a>
+                    </div>
+                    <div class="caption">
+                        <div class="clickable" tabindex="0" role="button" 
+                            onclick="info('${cur['id']}');" 
+                            onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();info('${cur['id']}');}"
+                        >${escapeHTML(cur['title'])}</div>
+                    </div>
+                </div>
+            `;
         }
-        input[type="text"]::placeholder {
-            color: #aaa;
-            opacity: 1;
-        }        
-        body {
-            color: #ccc;
-            background-color: #252523;
+    }
+    output.innerHTML = temp;
+}
+
+function format_lat_long(latitude, longitude) {
+    function decimal_to_dms(decimal, is_latitude = true) {
+        let direction;
+        if (is_latitude) {
+            direction = decimal >= 0 ? "N" : "S";
+        } else {
+            direction = decimal >= 0 ? "E" : "W";
         }
+        decimal = Math.abs(decimal);
+        const degrees = Math.floor(decimal);
+        const decimal_minutes = (decimal - degrees) * 60;
+        const minutes = Math.floor(decimal_minutes);
+        const seconds = (decimal_minutes - minutes) * 60;
+        return `${degrees}\u00b0${minutes}'${seconds.toFixed(1)}"${direction}`;
+    }
+    const lat_formatted = decimal_to_dms(latitude, true);
+    const long_formatted = decimal_to_dms(longitude, false);
+    return `${lat_formatted} ${long_formatted}`;
+}
+
+function openView(cur) {
+    let temp = `
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Summary</title>
+        <style>
         a {
             color: #bbf;
             text-decoration: none;
@@ -29,447 +214,135 @@
             color: #bbf;
             text-decoration: underline;
         }
-        .entry {
-            padding: 10px;
+        div {
+            width: 30em;
+            text-indent: -2em;
+            padding-left: 2em;
+            hanging-punctuation: first;
         }
-        .gallery {
-            display: flex;
-            flex-wrap: wrap;
-            justify-content: center;
-            gap: 30px;
-            margin: 0 auto;
-        }        
-        .gallery-item {
-            width: 300px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            background-color: #444;
-            border-radius: 8px;
-            overflow: hidden;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        body {
+            color: #ccc;
+            background-color: #252523;
         }
-        .gallery-item:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+        </style>
+        </head>
+        <body>
+        <a target="_blank" href="img/${cur['id']}/${cur['title'].replace(/[^A-Za-z0-9]+/g,'_')}.jpg">
+        <img src="preview/${cur['id']}.jpg"></a><br>
+        <div><strong>Title</strong>: ${escapeHTML(cur['title'])}</div><br>
+        <div><strong>Description</strong>: ${escapeHTML(cur['desc'])}</div><br>
+        <div><strong>Keywords</strong>: ${cur['keys'].map(x => escapeHTML(x)).join(', ')}</div><br>
+        <div><strong>Model</strong>: ${escapeHTML(cur["model"])}</div><br>
+    `;
+    let need_exif_header = true;
+  
+    function dump_exif_header() {
+        if (need_exif_header) {
+            need_exif_header = false;
+            temp += "<div><strong>Image Metadata</strong>:<br>";
         }
-        .image-container {
-            width: 100%;
-            height: 300px;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            overflow: hidden;
-            background-color: #333;
+    }
+
+    let exif = cur['exif'];
+    if ("CreateDate" in exif) {
+        dump_exif_header();
+        let at = exif["CreateDate"];
+        at = at.replace(/:/g, " ").replace(/-/g, " ");
+        at = at.split(' ').map(x => parseInt(x));
+        let dateObj = new Date(at[0], at[1] - 1, at[2], at[3], at[4], at[5]);
+        at = dateObj.toISOString().slice(0, 19).replace('T', ' ');
+        temp += `<strong>Image Taken</strong>: ${at}<br>`;
+    } else if ("FileCreateDate" in exif) {
+        dump_exif_header();
+        let at = exif["FileCreateDate"];
+        at = at.replace(/:/g, " ").replace(/-/g, " ");
+        at = at.split(' ').map(x => parseInt(x));
+        let dateObj = new Date(at[0], at[1] - 1, at[2], at[3], at[4], at[5]);
+        at = dateObj.toISOString().slice(0, 19).replace('T', ' ');
+        temp += `<strong>Image Taken</strong>: ${at}<br>`;
+    }
+
+    if ("LensModel" in exif) {
+        dump_exif_header();
+        temp += escapeHTML(exif["LensModel"]) + "<br>";
+    } else if ("Make" in exif && "Model" in exif) {
+        dump_exif_header();
+        temp += escapeHTML(exif["Make"]) + ": " + escapeHTML(exif["Model"]) + "<br>";
+    }
+
+    let row = [];
+    if ("ISO" in exif) row.push(`ISO ${exif['ISO']}`);
+    if ("FocalLength" in exif) row.push(exif['FocalLength']);
+    if ("ExposureCompensation" in exif) row.push(`EV ${exif['ExposureCompensation']}`);
+    if ("FNumber" in exif) row.push(`f ${exif['FNumber']}`);
+    if ("ShutterSpeedValue" in exif) row.push(`${exif['ShutterSpeedValue']}s`);
+  
+    if (row.length > 0) {
+        dump_exif_header();
+        temp += row.join(", ") + "<br>";
+    }
+  
+    if ("GPSLatitude" in exif && "GPSLongitude" in exif) {
+        dump_exif_header();
+        let gps_lat = `${exif['GPSLatitudeRef'] === 'South' ? '-' : ''}${exif['GPSLatitude']}`;
+        let gps_long = `${exif['GPSLongitudeRef'] === 'West' ? '-' : ''}${exif['GPSLongitude']}`;
+        let gps_coords = format_lat_long(parseFloat(gps_lat), parseFloat(gps_long));
+        let url = `https://www.google.com/maps/place/${encodeURIComponent(gps_coords)}/@${gps_lat},${gps_long},15z`;
+        temp += `<strong>Location</strong>: <a href="${url}" target="_blank">${gps_coords}</a><br>`;
+    }
+  
+    if (!need_exif_header) {
+        temp += "</div><br>";
+    }
+
+    temp += `
+        <div><strong>Filename</strong>:<pre>${escapeHTML(cur['fn'])}</pre></div>
+        </body>
+        </html>
+    `;
+
+    const newWindow = window.open();
+    newWindow.document.write(temp);
+    newWindow.document.close();
+}
+
+function info(key) {
+    for (const cur of items) {
+        if ("" + key == "" + cur['id']) {
+            openView(cur);
+            break;
         }
-        .gallery-item img {
-            max-width: 300px;
-            max-height: 300px;
-            object-fit: contain;
-            display: block;
-            margin: 0 auto;
-        }
-        .caption {
-            padding: 15px;
-            text-align: center;
-            font-size: 16px;
-            width: 100%;
-        }
-        @media (max-width: 768px) {
-            .gallery {
-                gap: 20px;
-            }            
-            .gallery-item {
-                width: 100%;
-                max-width: 300px;
-            }
-        }
-    </style>
+    }
+}
+
+function showInfo(htmlString) {
+    const newWindow = window.open();
+    newWindow.document.write(htmlString);
+    newWindow.document.close();
+}
+
+document.addEventListener("DOMContentLoaded", function(event) {
+    textInput = document.getElementById('textInput');
+    output = document.getElementById('output');
+
+    textInput.addEventListener('keydown', function(event) {
+        handleSubmit(textInput.value.trim());
+    });
+
+    loadData("all_items").then(data => {
+        items = data;
+        textInput.disabled = false;
+        textInput.focus();
+        handleSubmit("");
+    });
+});
+</script>
 </head>
 <body>
-<div id="output" class="gallery"><div class="gallery-item">
-    <div class="image-container">
-        <img 
-           loading="lazy" src="1.jpg" width="300" 
-           height="200">
-    </div>
-    <div class="caption">
-        <strong>Title</strong>: Joyful Women on a Tropical Beach<br>
-        <strong>Desc</strong>: A vibrant group of diverse women are walking along a sandy beach at sunset. They are all wearing colorful, flowing dresses, creating a joyful and celebratory atmosphere. The scene is set on a Caribbean coastline with a calm ocean and a wooden pier in the background. This image captures a moment of friendship, vacation, and summer fun.<br>
-        <strong>Keywords</strong>: group of women, beach, vacation, colorful dresses, Caribbean, friends, travel, summer, sunset, celebration<br>
-    </div>
+<div class="entry">
+<input type="text" id="textInput" autofocus disabled placeholder="Type something here...">
 </div>
-<div class="gallery-item">
-    <div class="image-container">
-        <img 
-           loading="lazy" src="2.jpg" width="300" 
-           height="200">
-    </div>
-    <div class="caption">
-        <strong>Title</strong>: Group Jumps on a Catamaran<br>
-        <strong>Desc</strong>: A vibrant photograph shows a group of people joyfully jumping from the deck of a white catamaran into turquoise water on a sunny day.  The clear blue sky and calm ocean create a scene of summer adventure and fun.  The catamaran is a luxurious sailing vessel, and the image evokes feelings of relaxation and excitement.<br>
-        <strong>Keywords</strong>: catamaran, sailing, jump, ocean, water, vacation, summer, boat, luxury, blue sky, people, friends, adventure<br>
-    </div>
+<div id="output" class="gallery">
 </div>
-<div class="gallery-item">
-    <div class="image-container">
-        <img 
-           loading="lazy" src="3.jpg" width="300" 
-           height="168">
-    </div>
-    <div class="caption">
-        <strong>Title</strong>: Serene Boat Trip on a Mediterranean Lake<br>
-        <strong>Desc</strong>: A beautiful woman relaxes on a wooden boat in a calm, blue lake. The backdrop features a stunning mountain landscape and a coastal town, creating a picturesque Mediterranean scene perfect for summer vacation and relaxation. The image evokes feelings of tranquility, luxury, and the joy of being by the water.<br>
-        <strong>Keywords</strong>: boat, lake, summer, sea, water, relaxation, vacation, sun, woman, landscape, Adriatic Sea, Italy, Mediterranean, travel, luxury<br>
-    </div>
-</div>
-<div class="gallery-item">
-    <div class="image-container">
-        <img 
-           loading="lazy" src="4.jpg" width="300" 
-           height="200">
-    </div>
-    <div class="caption">
-        <strong>Title</strong>: Family Fun on the Beach<br>
-        <strong>Desc</strong>: A vibrant and joyful photograph of a family – a father, mother, and young son – jumping in the air on a beautiful beach. The golden hour sunlight creates a warm and inviting atmosphere, capturing a moment of pure happiness and connection.<br>
-        <strong>Keywords</strong>: family, beach, jumping, joy, celebration, vacation, children, summer, ocean, sand, sunset<br>
-    </div>
-</div>
-<div class="gallery-item">
-    <div class="image-container">
-        <img 
-           loading="lazy" src="5.jpg" width="300" 
-           height="200">
-    </div>
-    <div class="caption">
-        <strong>Title</strong>: Tropical Sunset by the Pool<br>
-        <strong>Desc</strong>: A serene image capturing a luxurious resort scene at sunset. Two people relax in lounge chairs alongside a beautiful infinity pool, surrounded by palm trees and a stunning ocean view.  The warm light of the setting sun creates a peaceful and inviting atmosphere, perfect for a vacation or a moment of relaxation.<br>
-        <strong>Keywords</strong>: beach, pool, resort, tropical, sunset, palm trees, relaxation, vacation, ocean, luxury<br>
-    </div>
-</div>
-<div class="gallery-item">
-    <div class="image-container">
-        <img 
-           loading="lazy" src="6.jpg" width="300" 
-           height="204">
-    </div>
-    <div class="caption">
-        <strong>Title</strong>: Family Enjoying a Sunny Beach Day<br>
-        <strong>Desc</strong>: A joyful family of three – a father and two daughters – are smiling and relaxing in the ocean. They are wearing snorkeling gear and floating on a yellow inflatable raft. The scene is bright and sunny, suggesting a perfect summer vacation.<br>
-        <strong>Keywords</strong>: family, beach, ocean, swimming, water, sun, vacation, snorkeling, joy, happiness, summer, children, adult<br>
-    </div>
-</div>
-<div class="gallery-item">
-    <div class="image-container">
-        <img 
-           loading="lazy" src="7.jpg" width="300" 
-           height="200">
-    </div>
-    <div class="caption">
-        <strong>Title</strong>: Tropical Beach Paradise<br>
-        <strong>Desc</strong>: A stunning photograph showcasing a pristine tropical beach with crystal-clear turquoise water and a bright blue sky. A thatched-roof umbrella provides shade over two beach chairs, inviting relaxation and offering a classic image of a perfect beach vacation. The white sand creates a beautiful contrast to the vibrant colors of the sea and sky.<br>
-        <strong>Keywords</strong>: beach, paradise, tropical, sea, sand, umbrella, relaxation, vacation, turquoise, blue sky, sunny<br>
-    </div>
-</div>
-<div class="gallery-item">
-    <div class="image-container">
-        <img 
-           loading="lazy" src="8.jpg" width="300" 
-           height="168">
-    </div>
-    <div class="caption">
-        <strong>Title</strong>: Family Fun on the Beach<br>
-        <strong>Desc</strong>: A joyful family scene on a sunny beach. A father and son are actively playing in the sand, while a daughter builds a sandcastle. A mother relaxes nearby with a drink, enjoying the beautiful blue ocean view and the warm summer day. This image captures the essence of a relaxing family vacation.<br>
-        <strong>Keywords</strong>: family, beach, summer, sand, children, playing, ocean, vacation, sun, blue sky<br>
-    </div>
-</div>
-<div class="gallery-item">
-    <div class="image-container">
-        <img 
-           loading="lazy" src="9.jpg" width="300" 
-           height="175">
-    </div>
-    <div class="caption">
-        <strong>Title</strong>: Happy Family on a Tropical Beach<br>
-        <strong>Desc</strong>: A joyful family of four – a mother, father, son, and daughter – are enjoying a beautiful day on a pristine white sand beach. They are wearing matching white outfits, sunglasses, and hats, and the son is holding a yellow inflatable ring. The turquoise ocean and blue sky create a stunning tropical backdrop. This image evokes feelings of relaxation, family fun, and a perfect summer holiday.<br>
-        <strong>Keywords</strong>: family, beach, vacation, travel, summer, holiday, sea, sand, children, sun, paradise, tropical<br>
-    </div>
-</div>
-<div class="gallery-item">
-    <div class="image-container">
-        <img 
-           loading="lazy" src="10.jpg" width="300" 
-           height="200">
-    </div>
-    <div class="caption">
-        <strong>Title</strong>: Tropical Sunset Beach Scene<br>
-        <strong>Desc</strong>: A stunning image captures a serene beach scene at sunset.  Two lounge chairs are shaded by an umbrella under a palm tree, with the golden light reflecting off the white sand and turquoise sea.  It evokes a sense of tranquility and perfect vacation vibes.<br>
-        <strong>Keywords</strong>: beach, sunset, sea, sand, palm tree, paradise, relaxation, vacation, tropical, umbrellas, chairs<br>
-    </div>
-</div>
-<div class="gallery-item">
-    <div class="image-container">
-        <img 
-           loading="lazy" src="11.jpg" width="300" 
-           height="199">
-    </div>
-    <div class="caption">
-        <strong>Title</strong>: Family Vacation on a Tropical Beach<br>
-        <strong>Desc</strong>: A joyful family of three – a mother, father, and young child – are relaxing and playing on a beautiful white sand beach. The turquoise waters of the ocean stretch out to the horizon, and boats can be seen in the distance. It&#x27;s a perfect image representing a summer vacation and family time.<br>
-        <strong>Keywords</strong>: beach, family, vacation, summer, sand, sea, sun, tropical, holiday, kids, water, blue<br>
-    </div>
-</div>
-<div class="gallery-item">
-    <div class="image-container">
-        <img 
-           loading="lazy" src="12.jpg" width="300" 
-           height="200">
-    </div>
-    <div class="caption">
-        <strong>Title</strong>: Happy Family on a Tropical Beach<br>
-        <strong>Desc</strong>: A joyful family of four – a mother, father, son, and daughter – are walking along a beautiful white sand beach towards the turquoise ocean under a bright blue sky with fluffy clouds. They are wearing summer clothes, hats, and sunglasses, suggesting a relaxing holiday or vacation. The scene evokes feelings of happiness, family time, and a tropical paradise.<br>
-        <strong>Keywords</strong>: family, beach, vacation, holiday, travel, children, sea, ocean, sand, summer, sun, blue sky, paradise, tropical<br>
-    </div>
-</div>
-<div class="gallery-item">
-    <div class="image-container">
-        <img 
-           loading="lazy" src="13.jpg" width="300" 
-           height="200">
-    </div>
-    <div class="caption">
-        <strong>Title</strong>: Happy Family Road Trip<br>
-        <strong>Desc</strong>: A joyful family of four - a father, mother, and two children - are taking a selfie during a scenic road trip. They are smiling and appear to be enjoying a beautiful summer day outdoors.<br>
-        <strong>Keywords</strong>: family, travel, road trip, children, joy, happiness, car, outdoors, summer, portrait, smiling<br>
-    </div>
-</div>
-<div class="gallery-item">
-    <div class="image-container">
-        <img 
-           loading="lazy" src="14.jpg" width="300" 
-           height="200">
-    </div>
-    <div class="caption">
-        <strong>Title</strong>: Family Beach Vacation - Sunset<br>
-        <strong>Desc</strong>: A joyful family of three – a mother, father, and young daughter – are enjoying a beautiful sunset on a sandy beach. They are dressed in matching striped shirts, hats, and sunglasses, and are playfully posing with their arms outstretched, creating a sense of happiness and summer vacation.<br>
-        <strong>Keywords</strong>: family, beach, summer, vacation, ocean, sunset, parent, child, happiness, travel, striped shirt, sun hat, sand<br>
-    </div>
-</div>
-<div class="gallery-item">
-    <div class="image-container">
-        <img 
-           loading="lazy" src="15.jpg" width="275" 
-           height="183">
-    </div>
-    <div class="caption">
-        <strong>Title</strong>: Family Enjoying a Beach Day<br>
-        <strong>Desc</strong>: A happy family of four – two parents and two young children – are enjoying a sunny day at the beach. They are sitting on a beach mat, arms raised towards the sky, with a blue ocean and sandy beach in the background.  The scene evokes feelings of relaxation, joy, and a perfect summer vacation.<br>
-        <strong>Keywords</strong>: family, beach, summer, vacation, sun, sand, ocean, children, happiness, outdoors<br>
-    </div>
-</div>
-<div class="gallery-item">
-    <div class="image-container">
-        <img 
-           loading="lazy" src="16.jpg" width="300" 
-           height="200">
-    </div>
-    <div class="caption">
-        <strong>Title</strong>: Tropical Beach Relaxation<br>
-        <strong>Desc</strong>: Two people enjoy a peaceful moment on a beautiful tropical beach. Turquoise ocean, white sand, palm trees, and a bright blue sky create a serene and idyllic vacation scene.  Perfect for searches related to beach vacations, relaxation, and tropical destinations.<br>
-        <strong>Keywords</strong>: beach, sea, ocean, sand, palm tree, tropical, vacation, relaxation, sun, sky, blue, chairs, summer<br>
-    </div>
-</div>
-<div class="gallery-item">
-    <div class="image-container">
-        <img 
-           loading="lazy" src="17.jpg" width="300" 
-           height="200">
-    </div>
-    <div class="caption">
-        <strong>Title</strong>: Tropical Beach Relaxation<br>
-        <strong>Desc</strong>: A beautiful, serene image of a couple relaxing on beach chairs overlooking a turquoise ocean and clear sky. This scene evokes feelings of vacation, relaxation, and a tropical paradise. Features include white sand, palm trees in the distance, and a vibrant blue sky with clouds.<br>
-        <strong>Keywords</strong>: beach, tropical, vacation, sea, ocean, sand, relaxation, sun, sky, couple, chairs, paradise, turquoise water, resort, holiday<br>
-    </div>
-</div>
-<div class="gallery-item">
-    <div class="image-container">
-        <img 
-           loading="lazy" src="18.jpg" width="300" 
-           height="106">
-    </div>
-    <div class="caption">
-        <strong>Title</strong>: Family Fun on the Beach<br>
-        <strong>Desc</strong>: A vibrant image of a Black family joyfully running along a sandy beach.  A father and two children (a boy and a girl) are captured mid-run, smiling and full of energy. The background features a coastline, a calm ocean, and other people enjoying the beach.<br>
-        <strong>Keywords</strong>: family, beach, running, children, summer, joy, vacation, shore, happy, outdoor, black family<br>
-    </div>
-</div>
-<div class="gallery-item">
-    <div class="image-container">
-        <img 
-           loading="lazy" src="19.jpg" width="300" 
-           height="199">
-    </div>
-    <div class="caption">
-        <strong>Title</strong>: Secluded Tropical Paradise: Overwater Bungalows in the Maldives<br>
-        <strong>Desc</strong>: This stunning image showcases a luxurious overwater bungalow resort in the Maldives. Bright turquoise waters lap against a pristine white sand beach, shaded by a towering palm tree.  Two distinctive thatched-roof bungalows are moored on stilts, offering an idyllic escape to a tropical paradise.  The clear blue sky with scattered clouds completes the picture of a dream vacation destination.<br>
-        <strong>Keywords</strong>: tropical beach, overwater bungalows, palm tree, turquoise water, Maldives, luxury vacation, ocean, sand, seascape, paradise<br>
-    </div>
-</div>
-<div class="gallery-item">
-    <div class="image-container">
-        <img 
-           loading="lazy" src="20.jpg" width="300" 
-           height="168">
-    </div>
-    <div class="caption">
-        <strong>Title</strong>: Secluded Beach Paradise<br>
-        <strong>Desc</strong>: A stunning photograph of a pristine, turquoise ocean beach with a rustic straw umbrella and two wooden chairs. The bright blue sky dotted with fluffy white clouds creates a tranquil and inviting atmosphere, perfect for relaxation and enjoying the beauty of the tropics.<br>
-        <strong>Keywords</strong>: beach, sea, ocean, sand, sky, blue, turquoise, palm, umbrella, relaxation, tropical, vacation, paradise, sun, clouds<br>
-    </div>
-</div>
-<div class="gallery-item">
-    <div class="image-container">
-        <img 
-           loading="lazy" src="21.jpg" width="300" 
-           height="169">
-    </div>
-    <div class="caption">
-        <strong>Title</strong>: Beach Relaxation<br>
-        <strong>Desc</strong>: A serene image of a person enjoying a peaceful moment on a tropical beach. They are sitting in a beach chair, reading a book while the sun shines and the turquoise sea stretches out to the horizon. It evokes a feeling of tranquility and a perfect vacation.<br>
-        <strong>Keywords</strong>: beach, relaxation, vacation, sea, sand, reading, sun, chair, holiday, summer<br>
-    </div>
-</div>
-<div class="gallery-item">
-    <div class="image-container">
-        <img 
-           loading="lazy" src="22.jpg" width="300" 
-           height="150">
-    </div>
-    <div class="caption">
-        <strong>Title</strong>: Tropical Beach Paradise<br>
-        <strong>Desc</strong>: A beautiful, serene image of a white sandy beach with turquoise waters under a clear blue sky.  Two lounge chairs and an umbrella are positioned under the shade of a palm tree, creating an idyllic scene perfect for relaxation and a tropical getaway.<br>
-        <strong>Keywords</strong>: beach, sea, sand, ocean, tropical, paradise, relaxation, vacation, umbrella, sun, sky, palm tree<br>
-    </div>
-</div>
-<div class="gallery-item">
-    <div class="image-container">
-        <img 
-           loading="lazy" src="23.jpg" width="300" 
-           height="200">
-    </div>
-    <div class="caption">
-        <strong>Title</strong>: Happy Family on a Beach Vacation<br>
-        <strong>Desc</strong>: A joyful family of four - a father and three daughters - are captured jumping and smiling on a beautiful sandy beach. The image depicts a sunny day with calm ocean waters and a bright sky, evoking feelings of happiness, vacation, and family togetherness.  The family is dressed in casual summer clothing, further enhancing the relaxed and cheerful atmosphere.<br>
-        <strong>Keywords</strong>: family, beach, vacation, summer, joy, children, ocean, sand, portrait, happiness<br>
-    </div>
-</div>
-<div class="gallery-item">
-    <div class="image-container">
-        <img 
-           loading="lazy" src="24.jpg" width="300" 
-           height="199">
-    </div>
-    <div class="caption">
-        <strong>Title</strong>: Serene Beach Sunset<br>
-        <strong>Desc</strong>: A beautiful image of a tropical beach at sunset. Two beach chairs are positioned under a parasol, offering a tranquil spot to enjoy the golden light and the sound of the ocean. Palm trees frame the scene, creating a classic paradise feel.<br>
-        <strong>Keywords</strong>: beach, sunset, palm tree, chairs, paradise, tropical, relaxation, ocean, sand, golden hour<br>
-    </div>
-</div>
-<div class="gallery-item">
-    <div class="image-container">
-        <img 
-           loading="lazy" src="25.jpg" width="300" 
-           height="300">
-    </div>
-    <div class="caption">
-        <strong>Title</strong>: Happy Family Vacation on the Beach<br>
-        <strong>Desc</strong>: A joyful family – a father and daughter – are enjoying a sunny day at the beach. The father is carrying his daughter on his shoulders, both with arms outstretched in a playful pose, while the daughter wears a colorful hat and sunglasses. The turquoise sea and blue sky create a vibrant and happy scene, perfect for a summer vacation.<br>
-        <strong>Keywords</strong>: family, beach, summer, vacation, child, parent, joy, happiness, travel, sun, sea, sand, celebration, fun, warmth, couple<br>
-    </div>
-</div>
-<div class="gallery-item">
-    <div class="image-container">
-        <img 
-           loading="lazy" src="26.jpg" width="300" 
-           height="168">
-    </div>
-    <div class="caption">
-        <strong>Title</strong>: Happy Family Vacation by the Sea<br>
-        <strong>Desc</strong>: A joyful family of four - a father, mother, and two young children - are captured in a candid moment taking a selfie on a beautiful beach. They are smiling, pointing at the camera, and enjoying a summer vacation under a bright blue sky. The image evokes feelings of happiness, togetherness, and the simple pleasures of travel.<br>
-        <strong>Keywords</strong>: family, beach, vacation, travel, summer, portrait, people, joy, happiness, sun, ocean, selfie, photography<br>
-    </div>
-</div>
-<div class="gallery-item">
-    <div class="image-container">
-        <img 
-           loading="lazy" src="27.jpg" width="300" 
-           height="225">
-    </div>
-    <div class="caption">
-        <strong>Title</strong>: Family Fun on the Beach<br>
-        <strong>Desc</strong>: A joyful family of four – a father, a son, a mother, and a daughter – are running excitedly along a white sandy beach into the ocean. The children are laughing and splashing in the waves, capturing a moment of carefree summer fun and happiness. The scene is bright and sunny, suggesting a perfect beach vacation.<br>
-        <strong>Keywords</strong>: family, beach, running, children, summer, joy, ocean, sand, vacation, happiness<br>
-    </div>
-</div>
-<div class="gallery-item">
-    <div class="image-container">
-        <img 
-           loading="lazy" src="28.jpg" width="300" 
-           height="200">
-    </div>
-    <div class="caption">
-        <strong>Title</strong>: Scenic Gulf Drive Motel Sign, Florida<br>
-        <strong>Desc</strong>: A vibrant, vintage motel sign advertising &#x27;Scenic Drive East Along Gulf of America,&#x27; featuring &#x27;World&#x27;s Whitest Beaches&#x27; and &#x27;Restaurants.&#x27; The sign is located in Florida, showcasing a classic roadside attraction and the appeal of coastal travel.<br>
-        <strong>Keywords</strong>: Florida, Signage, Motel, Beach, Gulf Coast, Travel, Vintage, Retro, Scenic Drive, White Beaches, Restaurants<br>
-    </div>
-</div>
-<div class="gallery-item">
-    <div class="image-container">
-        <img 
-           loading="lazy" src="29.jpg" width="300" 
-           height="233">
-    </div>
-    <div class="caption">
-        <strong>Title</strong>: Welcome to Las Vegas!<br>
-        <strong>Desc</strong>: A vibrant photo capturing a couple excitedly welcoming visitors to the iconic &#x27;Welcome to Fabulous Las Vegas&#x27; sign in Nevada. The bright blue sky and palm trees create a classic Vegas backdrop, symbolizing a fun and memorable travel experience.<br>
-        <strong>Keywords</strong>: Las Vegas, Welcome Sign, Nevada, Travel, Tourism, Palm Trees, People, Couple, Outdoor, Celebration, Bright Sign<br>
-    </div>
-</div>
-<div class="gallery-item">
-    <div class="image-container">
-        <img 
-           loading="lazy" src="30.jpg" width="300" 
-           height="200">
-    </div>
-    <div class="caption">
-        <strong>Title</strong>: Welcome to Fabulous Las Vegas<br>
-        <strong>Desc</strong>: A vibrant nighttime photograph of the iconic &#x27;Welcome to Fabulous Las Vegas&#x27; sign, surrounded by palm trees, against a dark sky. This image represents the excitement, glamour, and entertainment hub of Las Vegas, Nevada. It is a popular tourist destination known for its casinos, shows, and nightlife.<br>
-        <strong>Keywords</strong>: Las Vegas, Welcome Sign, Neon Sign, Palm Trees, Night, Nevada, Cityscape, Travel, Tourism, Entertainment<br>
-    </div>
-</div>
-<div class="gallery-item">
-    <div class="image-container">
-        <img 
-           loading="lazy" src="31.jpg" width="300" 
-           height="199">
-    </div>
-    <div class="caption">
-        <strong>Title</strong>: Beach Sign - &#x27;Life is Good at the Beach&#x27;<br>
-        <strong>Desc</strong>: A rustic wooden sign reading &#x27;Life is good at the beach&#x27; stands on a sandy beach with a turquoise ocean and palm trees in the background. The sign has a stylized floral design.  It evokes a feeling of relaxation, summer vacation, and enjoying the beauty of the coast.<br>
-        <strong>Keywords</strong>: beach, sign, tropical, sea, ocean, palm tree, vacation, travel, summer, relaxation, life is good<br>
-    </div>
-</div>
-<div class="gallery-item">
-    <div class="image-container">
-        <img 
-           loading="lazy" src="32.jpg" width="300" 
-           height="160">
-    </div>
-    <div class="caption">
-        <strong>Title</strong>: Walt Disney World Entrance<br>
-        <strong>Desc</strong>: A vibrant image depicting the iconic entrance to Walt Disney World in Florida, featuring Mickey Mouse and Minnie Mouse flanking the grand archway. The scene is set against a beautiful sky with clouds and flags, creating a magical and inviting atmosphere.<br>
-        <strong>Keywords</strong>: Disney World, Mickey Mouse, Minnie Mouse, Theme Park, Entrance Arch, Magic Kingdom, Florida, Sky, Clouds, Flags, Cartoon, Animation<br>
-    </div>
-</div>
-</div></body></html>
+</body>
+</html>
