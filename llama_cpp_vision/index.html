@@ -136,6 +136,7 @@ function escapeHTML(str) {
 }
 
 function handleSubmit(text) {
+    console.log("Searching for " + text + "...")
     let temp = '';
     text = text.toLowerCase();
     for (const cur of items) {
@@ -161,14 +162,15 @@ function handleSubmit(text) {
             temp += `
                 <div class="gallery-item">
                     <div class="image-container">
-                        <a target="_blank" href="img/${cur['id']}/${cur['title'].replace(/[^A-Za-z0-9]+/g, '_')}.jpg"><img 
-                        loading="lazy" src="preview/${cur['id']}.jpg" width="${cur["w"]}" 
-                        height="${cur["h"]}"></a>
+                        <a target="_blank" href="img/${cur['id']}/${encodeURI(cur['title'].replace(/[^A-Za-z0-9]+/g,'_'))}.jpg">
+                            <img loading="lazy" src="preview/${cur['id']}.jpg" width="${cur["w"]}" 
+                                height="${cur["h"]}">
+                        </a>
                     </div>
                     <div class="caption">
                         <div class="clickable" tabindex="0" role="button" 
-                            onclick="info('${cur['id']}');" 
-                            onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();info('${cur['id']}');}"
+                             onclick="info('${cur['id']}');" 
+                             onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();info('${cur['id']}');}"
                         >${escapeHTML(cur['title'])}</div>
                     </div>
                 </div>
@@ -227,12 +229,12 @@ function openView(cur) {
         </style>
         </head>
         <body>
-        <a target="_blank" href="img/${cur['id']}/${cur['title'].replace(/[^A-Za-z0-9]+/g,'_')}.jpg">
+
+        <a target="_blank" href="img/${cur['id']}/${encodeURI(cur['title'].replace(/[^A-Za-z0-9]+/g,'_'))}.jpg">
         <img src="preview/${cur['id']}.jpg"></a><br>
         <div><strong>Title</strong>: ${escapeHTML(cur['title'])}</div><br>
         <div><strong>Description</strong>: ${escapeHTML(cur['desc'])}</div><br>
         <div><strong>Keywords</strong>: ${cur['keys'].map(x => escapeHTML(x)).join(', ')}</div><br>
-        <div><strong>Model</strong>: ${escapeHTML(cur["model"])}</div><br>
     `;
     let need_exif_header = true;
   
@@ -295,11 +297,16 @@ function openView(cur) {
         temp += "</div><br>";
     }
 
-    temp += `
-        <div><strong>Filename</strong>:<pre>${escapeHTML(cur['fn'])}</pre></div>
-        </body>
-        </html>
-    `;
+    if ("text" in cur) {
+        temp += `<div><strong>Detected Text</strong>:`;
+        temp += cur["text"].replace(/[^ -~]+/g, " ");
+        temp += "</div><br>";
+    }
+
+    temp += `<div><strong>Filename</strong>:<pre>`;
+    temp += escapeHTML(cur['fn']) + "</pre></div>\n";
+    temp += '</body>';
+    temp += '</html>';
 
     const newWindow = window.open();
     newWindow.document.write(temp);
@@ -325,11 +332,11 @@ document.addEventListener("DOMContentLoaded", function(event) {
     textInput = document.getElementById('textInput');
     output = document.getElementById('output');
 
-    textInput.addEventListener('keydown', function(event) {
-        handleSubmit(textInput.value.trim());
+    textInput.addEventListener('input', function(event) {
+        handleSubmit(event.target.value.trim());
     });
 
-    loadData("all_items").then(data => {
+    loadData("all_items.json.gz").then(data => {
         items = data;
         textInput.disabled = false;
         textInput.focus();
