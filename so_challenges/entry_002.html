@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Decode the Brackets</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-size: 12pt;
+        }
+        
+        .container {
+            background: white;
+            padding: 1em;
+        }
+        
+        h1 {
+            font-size: 14pt;
+        }
+        
+        .puzzle-selection {
+            background: #f8f9ff;
+            border: 2px solid #e2e8f0;
+            padding: 1em;
+            margin-bottom: 1em;
+        }
+        
+        .puzzle-option {
+            background: white;
+            border: 2px solid #e2e8f0;
+            padding: 1em;
+            margin: 0.5em 0;
+            cursor: pointer;
+            transition: all 0.3s;
+            border-radius: 4px;
+        }
+        
+        .puzzle-option:hover {
+            border-color: #667eea;
+            background: #f7fafc;
+        }
+        
+        .puzzle-option.selected {
+            border-color: #667eea;
+            background: #edf2f7;
+        }
+        
+        .puzzle-title {
+            font-weight: bold;
+            color: #2d3748;
+            margin-bottom: 0.5em;
+        }
+        
+        .puzzle-hint {
+            color: #4a5568;
+            font-style: italic;
+        }
+        
+        .start-button {
+            padding: 0.75em 1.5em;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            border-radius: 4px;
+            margin-top: 1em;
+        }
+        
+        .start-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+        }
+        
+        .start-button:disabled {
+            background: #a0aec0;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        
+        .puzzle-display {
+            background: #f8f9ff;
+            border: 2px solid #e2e8f0;
+            padding: 1em;
+            word-wrap: break-word;
+        }
+        
+        .input-section {
+            background: #f0f4f8;
+            padding: 1em;
+        }
+        
+        .current-clue {
+            font-weight: bold;
+            color: #2d3748;
+        }
+        
+        input[type="text"] {
+            transition: border-color 0.3s;
+            padding: 0.5em;
+        }
+        
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        button {
+            padding: 0.75em;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+        }
+        
+        button:active {
+            transform: translateY(0);
+        }
+        
+        .feedback {
+            margin-top: 15px;
+            padding: 1em;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        
+        .feedback.show {
+            opacity: 1;
+        }
+        
+        .feedback.correct {
+            background: #c6f6d5;
+            color: #22543d;
+            border: 1px solid #9ae6b4;
+        }
+        
+        .feedback.incorrect {
+            background: #fed7d7;
+            color: #742a2a;
+            border: 1px solid #fc8181;
+        }
+        
+        .solved {
+            background: #c6f6d5;
+            color: #22543d;
+            padding: 1em;
+            text-align: center;
+            font-weight: bold;
+        }
+        
+        .progress {
+            text-align: center;
+            color: #4a5568;
+        }
+        
+        .solved-clues {
+            background: #e6fffa;
+            padding: 1em;
+        }
+        
+        .clue-item {
+            background: white;
+            padding: 1em;
+            border-left: 4px solid #4fd1c7;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .clue-text {
+            font-weight: bold;
+            color: #2d3748;
+        }
+        
+        .answer-text {
+            color: #38a169;
+            font-style: italic;
+        }
+        
+        .decoded-string {
+            background: #fff5f5;
+            padding: 1em;
+        }
+        
+        .string-display {
+            font-family: 'Courier New', monospace;
+            background: white;
+            padding: 1em;
+            color: #2d3748;
+            border: 1px solid #e2e8f0;
+            word-break: break-all;
+        }
+        
+        .back-to-selection {
+            background: #e2e8f0;
+            color: #2d3748;
+            padding: 0.5em 1em;
+            margin-bottom: 1em;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        
+        .back-to-selection:hover {
+            background: #cbd5e0;
+        }
+        
+        .game-area {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="puzzle-selection" id="puzzle-selection">
+            <h2>Choose a Puzzle:</h2>
+            <div id="puzzle-options"></div>
+            <button class="start-button" id="start-button" onclick="startSelectedPuzzle()" disabled>
+                Start Puzzle
+            </button>
+        </div>
+        
+        <div class="game-area" id="game-area">
+            <div class="back-to-selection" onclick="backToPuzzleSelection()">
+                Back to Puzzle Selection
+            </div>
+            
+            <div class="progress">
+                <span id="progress-text">Clue 1 of 8</span>
+            </div>
+            
+            <div class="puzzle-display" id="puzzle-display"></div>
+            
+            <div class="input-section" id="input-section">
+                <div class="current-clue" id="current-clue"></div>
+                <input type="text" id="answer-input" placeholder="Enter your answer...">
+                <button onclick="checkAnswer()">Submit</button>
+                <div class="feedback" id="feedback"></div>
+            </div>
+            
+            <div class="decoded-string" id="decoded-string" style="display: none;">
+                <h1>Decoded String</h3>
+                <div class="string-display" id="string-display"></div>
+            </div>
+            
+            <div class="solved-clues" id="solved-clues" style="display: none;">
+                <h1>Solved Clues</h3>
+                <div id="clues-list"></div>
+            </div>
+            
+            <div class="solved" id="solved-message" style="display: none;">
+                Congratulations! You've solved the puzzle!<br>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const puzzleData = 
+[
+    {
+        "title": "Heap of Wealth",
+        "answer": "Coding challenges involve creativity and fun, as they involve great chances to learn!",
+        "puzzle": "C[[Straightedge]r of the Aesir]g ch[[Eternally.]y: Ger.]nges involve creativity and fun, as [Unnamed [[Top cards].]] involve great chances to l[Rake in]!",
+        "solutions": 
+        [
+            ["Top cards", "Aces"],
+            ["Rake in", "earn"],
+            ["Eternally.", "Ever"],
+            ["Aces.", "ones"],
+            ["Straightedge", "Rule"],
+            ["Unnamed ones", "they"],
+            ["Ruler of the Aesir", "odin"],
+            ["Every: Ger.", "alle"]
+        ]
+    },
+    {
+        "title": "Reverse Iterator Move",
+        "answer": "Coding challenges involve creativity and fun, as they involve great chances to learn!",
+        "puzzle": "Coding ch[[Of all [Occasion.]]y: Ger.]nges involve creativity and fun, as [T[Flexible [[Lengthy] tube]] people] involve great chances to [King of drama.]n!",
+        "solutions": 
+        [
+            ["Lengthy", "Long"],
+            ["Occasion.", "time"],
+            ["Of all time", "Ever"],
+            ["King of drama.", "lear"],
+            ["Long tube", "pipe"],
+            ["Every: Ger.", "alle"],
+            ["Flexible pipe", "hose"],
+            ["Those people", "they"]
+        ]
+    },
+    {
+        "title": "Private Variable Status",
+        "answer": "Coding challenges involve creativity and fun, as they involve great chances to learn!",
+        "puzzle": "C[[Criterion.]r of the Aesir]g ch[[[Everlasting]ly.]y: Ger.]nges involve [Spanish linen.]tivity and fun, as they involve great [Derr Biggers hero]ces to l[Take in]!",
+        "solutions": 
+        [
+            ["Spanish linen.", "crea"],
+            ["Everlasting", "Eternal"],
+            ["Criterion.", "Rule"],
+            ["Ruler of the Aesir", "odin"],
+            ["Eternally.", "Ever"],
+            ["Take in", "earn"],
+            ["Every: Ger.", "alle"],
+            ["Derr Biggers hero", "chan"]
+        ]
+    },
+    {
+        "title": "Next Iteration",
+        "answer": "Coding challenges involve creativity and fun, as they involve great chances to learn!",
+        "puzzle": "C[[Occupy the [Monarch's [Ottoman.]]]r of the Aesir]g c[O[Rocky cliff.] winner Berry]nges involve creativity and fun, as [Those people] involve great chances to l[Work for.]!",
+        "solutions": 
+        [
+            ["Those people", "they"],
+            ["Ottoman.", "seat"],
+            ["Monarch's seat", "throne"],
+            ["Occupy the throne", "Rule"],
+            ["Rocky cliff.", "scar"],
+            ["Ruler of the Aesir", "odin"],
+            ["Oscar winner Berry", "halle"],
+            ["Work for.", "earn"]
+        ]
+    }
+]
+;
+
+        let currentClueIndex = 0;
+        let currentPuzzle = puzzleData.puzzle;
+        let solvedClues = [];
+        let decodedString = "";
+
+        function escapeHtml(text) {
+            return text.replace(/[&<>"']/g, match => {
+                return {
+                    '&': '&amp;',
+                    '<': '&lt;',
+                    '>': '&gt;',
+                    '"': '&quot;',
+                    "'": '&#39;'
+                }[match];
+            });
+        }
+
+        function initializePuzzleSelection() {
+            const optionsContainer = document.getElementById('puzzle-options');
+            
+            optionsContainer.innerHTML = puzzleData.map((puzzle, index) => 
+                `<div class="puzzle-option" onclick="selectPuzzle(${index})">
+                    <div class="puzzle-title">${escapeHtml(puzzle.title)}</div>
+                </div>`
+            ).join('');
+        }
+
+        function selectPuzzle(index) {
+            document.querySelectorAll('.puzzle-option').forEach(option => {
+                option.classList.remove('selected');
+            });
+            
+            selectedPuzzleIndex = index;
+            document.querySelectorAll('.puzzle-option')[index].classList.add('selected');
+            document.getElementById('start-button').disabled = false;
+        }
+
+        function startSelectedPuzzle() {
+            if (selectedPuzzleIndex === -1) return;
+            
+            currentPuzzleData = puzzleData[selectedPuzzleIndex];
+            resetGameState();
+            
+            document.getElementById('puzzle-selection').style.display = 'none';
+            document.getElementById('game-area').style.display = 'block';
+            
+            displayPuzzle();
+            updateCurrentClue();
+        }
+
+        function backToPuzzleSelection() {
+            document.getElementById('game-area').style.display = 'none';
+            document.getElementById('puzzle-selection').style.display = 'block';
+            resetGameState();
+        }
+
+        function resetGameState() {
+            currentClueIndex = 0;
+            currentPuzzle = currentPuzzleData ? currentPuzzleData.puzzle : "";
+            solvedClues = [];
+            decodedString = "";
+            
+            document.getElementById('input-section').style.display = 'block';
+            document.getElementById('solved-message').style.display = 'none';
+            document.getElementById('decoded-string').style.display = 'none';
+            document.getElementById('solved-clues').style.display = 'none';
+            document.getElementById('answer-input').value = '';
+            
+            const feedback = document.getElementById('feedback');
+            feedback.classList.remove('show');
+        }
+
+        function updateSolvedCluesDisplay() {
+            const solvedCluesContainer = document.getElementById('solved-clues');
+            const cluesListContainer = document.getElementById('clues-list');
+            
+            if (solvedClues.length > 0) {
+                solvedCluesContainer.style.display = 'block';
+                
+                cluesListContainer.innerHTML = solvedClues.map(item => 
+                    `<div class="clue-item">
+                        <div class="clue-text">"${escapeHtml(item.clue)}"</div>
+                        <div class="answer-text">${item.answer}</div>
+                    </div>`
+                ).join('');
+            }
+        }
+        
+        function updateDecodedStringDisplay() {
+            const decodedStringContainer = document.getElementById('decoded-string');
+            const stringDisplay = document.getElementById('string-display');
+            
+            if (decodedString.length > 0) {
+                decodedStringContainer.style.display = 'block';
+                stringDisplay.textContent = decodedString;
+            }
+        }
+        
+        function displayPuzzle() {
+            document.getElementById('puzzle-display').innerHTML = currentPuzzle;
+        }
+
+        function updateCurrentClue() {
+            if (currentClueIndex < currentPuzzleData.solutions.length) {
+                const [clue, answer] = currentPuzzleData.solutions[currentClueIndex];
+                /* Adding the number of letters in the clue to make this a little easier */
+                document.getElementById('current-clue').textContent = `Current clue: "${escapeHtml(clue)}", (${answer.length} letters)`;
+                document.getElementById('progress-text').textContent = `Clue ${currentClueIndex + 1} of ${currentPuzzleData.solutions.length}`;
+            }
+        }
+
+        function showFeedback(message, isCorrect) {
+            const feedback = document.getElementById('feedback');
+            feedback.textContent = message;
+            feedback.className = `feedback ${isCorrect ? 'correct' : 'incorrect'} show`;
+            
+            setTimeout(() => {
+                feedback.classList.remove('show');
+            }, 3000);
+        }
+
+        function checkAnswer() {
+            const userInput = document.getElementById('answer-input').value.trim();
+            
+            if (!userInput) {
+                showFeedback('Please enter an answer!', false);
+                return;
+            }
+
+            if (currentClueIndex >= currentPuzzleData.solutions.length) {
+                return;
+            }
+
+            const correctAnswer = currentPuzzleData.solutions[currentClueIndex][1];
+            const clue = currentPuzzleData.solutions[currentClueIndex][0];
+
+            if (userInput.toLowerCase() === correctAnswer.toLowerCase()) {
+                /* Update the puzzle with the answer, using the version with the correct case */
+                const cluePattern = `[${clue}]`;
+                currentPuzzle = currentPuzzle.replace(cluePattern, correctAnswer);
+                
+                /* And add the list of solved cluse */
+                solvedClues.push({ clue: clue, answer: correctAnswer });
+
+                /* And show the decoded string, just use the first character, like an acrostic puzzle */
+                /* A harder version that hides the solution would leave it to the user to figure this bit out */
+                decodedString += clue.substring(0, 1).toUpperCase();
+                
+                showFeedback(`Correct! "${clue}" = "${correctAnswer}"`, true);
+                currentClueIndex++;
+
+                /* Prepare for the next entry */
+                document.getElementById('answer-input').value = '';
+                
+                /* Refresh the quasi-data bound objects */
+                displayPuzzle();
+                updateSolvedCluesDisplay();
+                updateDecodedStringDisplay();
+                
+                if (currentClueIndex < currentPuzzleData.solutions.length) {
+                    updateCurrentClue();
+                } else {
+                    /* All done! */
+                    document.getElementById('input-section').style.display = 'none';
+                    document.getElementById('solved-message').style.display = 'block';
+                }
+            } else {
+                showFeedback(`Incorrect. Try again!`, false);
+            }
+        }
+
+        /* Since this is a simple single page thing, handle enter */
+        document.getElementById('answer-input').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                checkAnswer();
+            }
+        });
+
+        /* And finally, start things up! */
+        initializePuzzleSelection();
+    </script>
+</body>
+</html>
