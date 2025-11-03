@@ -147,7 +147,7 @@ def create_helpers(cur):
     # And mark this item as fixed up:
     cur['fixed'] = True
 
-def show_transcript(cur, start_at, end_at, segments=None, summary=None, output=print):
+def show_transcript(cur, start_at, end_at, segments=None, summary=None, speakers={}, output=print):
     # Show a transcript, from one word to the end word
     phrase = None
     ended_sentence = False
@@ -177,6 +177,7 @@ def show_transcript(cur, start_at, end_at, segments=None, summary=None, output=p
         if phrase is None:
             # First time through, start a new phrase
             new_phrase = True
+
         if ended_sentence:
             # Otherwise, only start one after a sentence ends
             if last_speaker != cur_speaker:
@@ -216,7 +217,8 @@ def show_transcript(cur, start_at, end_at, segments=None, summary=None, output=p
             # The speaker changed, show that
             if last_speaker != cur_speaker:
                 if cur_speaker != "@":
-                    phrase += f" {cur_speaker}:"
+                    # If this speaker is named, go ahead and use it
+                    phrase += f" {speakers.get(cur_speaker, cur_speaker)}:"
                 last_speaker = cur_speaker
 
         # Add the word to this phrase        
@@ -250,6 +252,7 @@ def search_transcripts(*search):
         #         'title': [],              # Titles for each segment
         #         'offset': [] }            # Start offset for each segment in seconds
         #     'summary': '...'              # Optional machine generated summary of episode
+        #     'speakers': {'A': 'Name'}     # Optional mapping of speaker IDs to names
         # }
 
         for i, hit in enumerate(enumerate_hits(cur['words'], search)):
@@ -264,7 +267,7 @@ def search_transcripts(*search):
             # Show each match
             print("")
             word_num = cur['index_to_word'][hit]
-            show_transcript(cur, max(0, word_num - 10), min(len(cur['offset']), word_num + 10))
+            show_transcript(cur, max(0, word_num - 10), min(len(cur['offset']), word_num + 10), speakers=cur.get('speakers', {}))
 
 @cmd("list", 0, "= List all episodes")
 def list_episodes():
@@ -283,7 +286,7 @@ def dump_episode(num):
             print(f"Published: {cur['published']}")
             print(f"Link: {cur['link']}")
             print("")
-            show_transcript(cur, 0, len(cur['start']), cur.get("segments"), cur.get("summary"))
+            show_transcript(cur, 0, len(cur['start']), cur.get("segments"), cur.get("summary"), speakers=cur.get('speakers', {}))
             exit(0)
 
 @cmd("dump_all", 1, "<dir_name> = Dump all episodes to text and JSON files")
@@ -308,7 +311,7 @@ def dump_all_episodes(dir_name):
             write_line(f"Link: {cur['link']}")
             write_line("")
 
-            show_transcript(cur, 0, len(cur['speaker']), cur.get("segments"), cur.get("summary"), write_line)
+            show_transcript(cur, 0, len(cur['speaker']), cur.get("segments"), cur.get("summary"), cur.get('speakers', {}), write_line)
 
         # Clean up the data to prepare it to be dumped:
         del cur['index_to_word']
