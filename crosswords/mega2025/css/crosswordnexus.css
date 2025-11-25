@@ -1,0 +1,573 @@
+/**
+Copyright (c) 2015-2021, Crossword Nexus
+CTFYC version
+
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
+
+3. Neither the name of the copyright holder nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+**/
+/* CSS for using the Crossword Nexus HTML5 Crossword Solver */
+
+.cw-main,
+.cw-main * {
+	font-family: "Avenir Next", "Avenir", "Nunito", "Helvetica Neue", "Helvetica", "Arial", sans-serif;
+	box-sizing: content-box; /* for consistency */
+}
+
+/**
+* Overlay: opening files
+**/
+div.cw-open-holder {
+	position: absolute;
+	top: 0;
+	left: 0;
+	bottom: 0;
+	z-index: 4;
+	width: 100%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+div.cw-overflow {
+	position: absolute;
+	top: 0;
+	left: 0;
+	height: 100%;
+	width: 100%;
+	background: white;
+	z-index: -1;
+}
+div.cw-main.loading div.cw-open-holder,
+div.cw-main.loaded div.cw-open-holder {
+	display: none;
+}
+
+.cw-open-puzzle {
+	align-items: center;
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	margin: 20px;
+	text-align: center;
+}
+.cw-open-puzzle-instructions {
+	font-size: 16px;
+	margin-bottom: 1em;
+}
+.cw-open-puzzle-formats {
+	font-size: 13px;
+	margin-top: 1em;
+	opacity: 0.7;
+}
+.cw-open-puzzle-note {
+	font-size: 13px;
+	margin-top: 0.25em;
+	opacity: 0.7;
+}
+.cw-open-holder input {
+	visibility: hidden;
+	position: absolute;
+}
+
+/* drag-and-drop style */
+div.has-advanced-upload {
+	outline: 2px dashed gray;
+	outline-offset: -10px;
+}
+
+div.is-dragover {
+	background-color: #fff5d7;
+}
+
+div.crossword {
+	position: absolute;
+	left: 0;
+	top: 0;
+	width: 100%;
+	height: 100%;
+}
+
+.cw-main {
+	bottom: 0;
+	display: flex;
+	flex-direction: column;
+	left: 0;
+	position: absolute;
+	right: 0;
+	top: 0;
+}
+.cw-main.loading {
+	visibility: hidden;
+}
+
+input.cw-hidden-input {
+	opacity: 0;
+	position: fixed;
+	top: -100px;
+	left: -100px;
+	width: 0;
+	height: 0;
+	z-index: -1;
+}
+
+.cw-header {
+	align-items: center;
+	display: flex;
+	padding: 0.8em 1em;
+	white-space: nowrap;
+	background: #6aa9f4;
+	color: #fff;
+}
+.cw-title,
+.cw-author,
+.cw-copyright {
+	flex: 0 1 auto;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.cw-title {
+	font-weight: bold;
+	margin-right: 0.5em;
+}
+.cw-header-separator {
+	flex: 0 0 auto;
+}
+.cw-author {
+	margin-right: 0.5em;
+}
+.cw-copyright {
+	color: #eee;
+	font-weight: 200;
+	font-size: 0.8em;
+	margin-right: 0.5em;
+}
+
+.cw-content {
+	display: flex;
+	flex: 1 1 auto;
+	min-height: 1px;
+	position: relative;
+}
+
+.cw-left {
+	display: flex;
+	flex: 1 1 auto;
+	flex-direction: column;
+	min-width: 300px;
+	position: relative;
+}
+
+.cw-canvas {
+	display: inline-block;
+	flex: 1 1 auto;
+	margin: 10px;
+	min-height: 300px;
+	position: relative;
+	text-align: center;
+}
+canvas {
+	margin: 0;
+	padding: 0;
+}
+.cw-canvas canvas {
+	margin: 0;
+	border: 2px solid #000;
+}
+
+.cw-clues-holder {
+	display: flex;
+	flex-shrink: 0;
+	max-height: 100%;
+}
+
+.cw-clues {
+	display: flex;
+	flex: 1 1 100%;
+	flex-direction: column;
+	margin-left: 10px;
+	min-height: 1px;
+	min-width: 1px;
+}
+
+.cw-buttons-holder {
+	align-items: center;
+	display: flex;
+	flex-shrink: 0;
+	box-shadow: 0 1px #ccc;
+}
+.cw-buttons-holder > *:not(:first-child) {
+	margin-left: 0.5em;
+}
+
+/**
+* Modal box
+**/
+/* The Modal (background) */
+.cw-modal {
+	display: none; /* Hidden by default */
+	position: fixed; /* Stay in place */
+	z-index: 1; /* Sit on top */
+	padding-top: 30px; /* location of the box */
+	left: 0;
+	top: 0;
+	width: 100%; /* Full width */
+	height: 100%; /* Full height */
+	overflow: auto; /* Enable scroll if needed */
+	background-color: rgb(0, 0, 0); /* Fallback color */
+	background-color: rgba(0, 0, 0, 0.4); /* Black w/ opacity */
+}
+
+/* Modal Content/Box */
+.modal-content {
+	position: relative;
+	background-color: #fefefe;
+	margin: auto;
+	padding: 0;
+	border: 1px solid #888;
+	width: 80%;
+	max-width: 600px;
+	overflow: hidden;
+}
+
+/* Modal Header */
+.modal-header {
+	padding: 2px 16px;
+	background-color: #777777;
+	color: white;
+	text-align: center;
+	height: 40px;
+	font-size: max(1.1em, 14px);
+	font-weight: 500;
+	display: none;
+}
+
+/* Modal Body */
+.modal-body {
+	padding: 2px 16px;
+	margin: 1em;
+	font-size: 12pt;
+}
+
+/* Modal Footer */
+.modal-footer {
+	border-top: 1px solid #e5e5e5;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 12px 16px;
+}
+
+/* The Close Button */
+.modal-close {
+	color: white;
+	float: right;
+	font-size: 28px;
+	font-weight: bold;
+}
+
+.modal-close:hover,
+.modal-close:focus {
+	color: #333333;
+	text-decoration: none;
+	cursor: pointer;
+}
+
+/* The modal footer button */
+.modal-button {
+	/* the footer is 40px, so these numbers are to center it */
+	margin: 10px auto;
+	height: 20px;
+}
+
+/**
+* Buttons
+**/
+
+.cw-button {
+	/* default yellow color scheme */
+	--button-background-color: ##fff;
+	--button-background-color-hover: #f0f0f0;
+	color: #666;
+
+	align-items: center;
+	background-color: var(--button-background-color);
+	border-radius: 0.2em;
+	border: none;
+	cursor: pointer;
+	display: flex;
+	font-size: 1em;
+	justify-content: center;
+	margin: 0;
+	padding: 0.25em 0.5em;
+	text-align: center;
+	margin-bottom: 0.125em;
+}
+.cw-button:hover {
+	background: #f0f0f0;
+}
+
+.cw-button-open-puzzle {
+	background: #6aa9f4;
+	color: white;
+	font-size: 32px;
+}
+.cw-button-open-puzzle:hover {
+	background: #4e86c8;
+}
+
+.cw-button-timer {
+	--button-background-color: #fff;
+	color: #000000;
+	}
+
+.cw-button-timer::before {
+	content: "(";
+}
+.cw-button-timer::after {
+	content: ")";
+}
+
+.cw-button-timer.running::before {
+	content: "";
+}
+.cw-button-timer.running::after {
+	content: "";
+}
+
+/* small gray button for notes */
+.cw-button-notes {
+	--button-background-color: #eeeeee;
+	--button-background-color-hover: #f2f2f2;
+	--button-shadow-color: #999999;
+	color: #000000;
+	font-size: 0.75em;
+}
+
+/**
+* Popup menus
+**/
+
+.cw-menu-container {
+	position: relative;
+}
+
+.cw-menu {
+	background-color: white;
+	border: 1px solid rgba(0, 0, 0, 0.1);
+	display: none;
+	margin-top: 9px;
+	padding: 0.2em 0;
+	position: absolute;
+	z-index: 1;
+}
+
+.cw-menu-item {
+	background: none;
+	border: none;
+	color: inherit; /* avoid Safari active style */
+	cursor: pointer;
+	display: block;
+	margin: 0;
+	font-size: 1em;
+	min-width: 7em;
+	padding: 0.5em 0.6em;
+	text-align: left;
+}
+.cw-menu-item:hover {
+	background-color: #f0f0f0;
+}
+
+/**
+* Clues
+**/
+
+.cw-clues-items {
+	flex: 1 1 auto;
+	min-height: 1px;
+	overflow-y: auto;
+}
+.cw-clue {
+	border-left: 8px solid transparent;
+	cursor: pointer;
+	display: flex;
+}
+.cw-clue.active {
+	border-left: 8px solid transparent;
+	background: #a7d8ff;
+}
+.cw-clue.passive {
+	border-left: 8px solid #a7d8ff;
+}
+.cw-clue-number {
+	flex-shrink: 0;
+	font-weight: 700;
+	text-align: right;
+	line-height: 21px;
+	min-width: 24px;
+}
+.cw-clue-text {
+	flex: 1 1 auto;
+	margin-left: 10px;
+	min-width: 1px;
+	word-wrap: break-word;
+}
+
+/* Settings */
+.settings-setting {
+	padding-top: 5px;
+	padding-bottom: 5px;
+}
+
+.settings-description {
+	font-weight: bold;
+}
+
+.settings-label {
+	display: block;
+}
+
+/**
+* Utilities
+**/
+
+.cw-flex-spacer {
+	flex-grow: 1;
+}
+
+/**
+* Size-dependent styles
+* NOTE: We don't use media queries here because we need to base the responsive
+* behavior on the width of the root element, not the width of the overall
+* window.
+**/
+
+.cw-main {
+	font-size: 12pt;
+}
+.cw-buttons-holder {
+	height: 50px;
+	padding-left: 10px;
+}
+.cw-clues {
+	width: 350px;
+
+}
+.cw-top-clue-bar {
+	background: #dcefff;
+	flex-shrink: 0;
+	align-items: center;
+	display: flex;
+	height: 60px;
+	margin: 11px 10px 0;
+}
+.cw-mobile {
+	padding-right: 15px;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	height: 60px;
+}
+.cw-mobile-left {
+	transform: rotate(180deg);
+}
+.cw-chevron {
+	margin-left: 5px;
+	background-image: url("../img/chevron.svg");
+	height: 18px;
+	width: 10px;
+	background-repeat: no-repeat;
+	background-size: contain;
+}
+.cw-top-text {
+	align-items: flex-start;
+	display: flex;
+	padding: 6px 15px 6px 15px;
+	line-height: 1.2;
+	flex-grow: 2;
+}
+.cw-clues-title {
+	align-items: flex-end;
+	box-shadow: 0 1px #ccc;
+	box-sizing: border-box;
+	display: flex;
+	flex-shrink: 0;
+	height: 50px;
+	padding: 5px 10px;
+	position: relative;
+	text-transform: uppercase;
+	font-weight: 700;
+	font-size: 14px;
+}
+.cw-clue {
+	padding: 5px 2px;
+}
+
+
+.cw-max-width-1200.cw-main {
+	font-size: 16px;
+}
+.cw-max-width-1200 .cw-top-clue-bar,
+.cw-max-width-1200 .cw-mobile {
+	height: 55px;
+}
+.cw-max-width-1200 .cw-top-text {
+	padding: 5px 10px 5px 10px;
+}
+.cw-max-width-1200 .cw-clues {
+	width: 300px;
+}
+.cw-max-width-1200 .cw-clues-holder {
+	width: auto;
+}
+
+.cw-max-width-1080.cw-main {
+	font-size: 14px;
+}
+.cw-max-width-1080 .cw-top-clue-bar,
+.cw-max-width-1000 .cw-mobile {
+	height: 45px;
+}
+.cw-max-width-1080 .cw-top-text {
+	padding: 4px 8px 4px 8px;
+}
+.cw-max-width-1080 .cw-clues {
+	width: 220px;
+}
+
+.cw-max-width-850 .cw-clues-holder {
+	flex-direction: column;
+}
+
+.cw-max-width-600.cw-main {
+	font-size: 14px;
+}
+.cw-max-width-600 .cw-top-text {
+	padding: 3px 5px 3px 5px;
+}
+.cw-max-width-600 .cw-clues-holder {
+	display: none;
+}
+
+.cw-max-width-600 .cw-buttons-holder {
+	height: 45px;
+	padding: 0 10px;
+}
+.cw-max-width-600 .cw-top-clue-bar,
+.cw-max-width-600 .cw-mobile {
+	height: 40px;
+}
+.cw-max-width-600 .cw-mobile {
+	display: flex !important;
+}
+
+.cw-max-width-420 .cw-button-icon {
+	display: none;
+}
