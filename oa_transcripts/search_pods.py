@@ -6,6 +6,161 @@
 # Please see the following link to search online:
 # https://q726kbxun.github.io/openargs/openargs.html
 
+# A markdown overview of the data file and the process behind this:
+
+r'''
+# Search Engine Data Format
+
+This document outlines the file specifications, naming conventions, and binary layout expected by the static, 
+client-side search engine.
+
+The system relies on **HTTP Range Requests** to fetch specific compressed chunks of data from larger container files. 
+This architecture allows the search engine to host large datasets statically while minimizing bandwidth usage.
+
+Note: Due to issues with GitHub Page's HTTP server, this system can also fall back to not using byte range requests. 
+For the first bootstrap data file, it's requested in whole, and parsed in two passes. The rest of the files are 
+constructed to only have one batch when the target is Github Pages, so they only ever need to be requested in whole on 
+that server.
+
+## 1. Naming Conventions
+
+All data files must reside in the same directory as the HTML search interface.
+
+| Filename Pattern | Description | Format |
+| --- | --- | --- |
+| `search_data_00.dat` | **Root Index.** The entry point for the search engine. | Plain Text JSON, and Binary |
+| `search_data_XX.dat` | **Container Files.** `XX` is a zero-padded, two-digit number (e.g., `01`, `15`). | 
+      Binary (Concatenated GZIP) |
+| `search_data_lemma.dat` | **Lemmatization.** (Optional) Dictionary for fuzzy matching. | GZIP Compressed JSON |
+
+## 2. Binary Layout & Container Files
+
+The files matching the pattern `search_data_XX.dat` (where XX > 0) are **Container Files**.
+
+These are **not** valid monolithic archives (like ZIP or TAR). Instead, they consist of multiple GZIP streams 
+concatenated back-to-back.
+
+**Layout Diagram:**
+
+```text
+[ GZIP STREAM A ] [ GZIP STREAM B ] [ GZIP STREAM C ] ...
+^ Offset 0        ^ Offset N        ^ Offset N+M
+```
+
+* **Access Method:** The client issues `fetch` requests with the header `Range: bytes=START-END`.
+* **Decoding:** The resulting blob is passed through a `DecompressionStream("gzip")` to extract the underlying JSON.
+
+## 3. Data Structures
+
+### A. The Root Index (`search_data_00.dat`)
+
+This file starts with an uncompressed plain text JSON, always of 100 bytes.  It bootstraps the application by pointing 
+to the location of the **Batch List**.
+It is padded with space characters to be 100 bytes.  The batch list is in this file as well, though the batch list is 
+stored compressed.
+
+```json
+{
+  "created": "2023-10-27", 
+  "items": 1234,              // Total searchable items (episodes)
+  "before": 15,               // Context words to display before a hit
+  "after": 100,               // Context words to display after a hit
+  "data": [0, 100, 123]       // Pointer to the Batch List
+}
+```
+
+* **`data`**: An array formatted as `[file_number, byte_offset, byte_length]`.
+
+### B. The Batch List
+
+This data block is stored as a compressed chunk within a container file (pointed to by the Root Index). When 
+decompressed, the batch list yields a JSON array of pointers. Each pointer defines a "Batch" of transcripts.
+
+```json
+[
+  [1, 2548, 50000],  // Points to Batch 1, inside search_data_01.dat
+  [1, 52548, 48000], // Points to Batch 2, also inside search_data_01.dat
+  [2, 0, 30500]      // Points to Batch 3, inside search_data_02.dat
+]
+```
+
+The target size for each batch is 10mb before compression. This is a target, and not a guarantee on the batch size.
+
+### C. The Transcript Item
+
+A "Batch" decompresses into a JSON Array of **Item Objects**. Each Item Object represents a single episode or document.
+
+```json
+{
+  "title": "Episode 101: The Example",
+  "link": "https://example.com/ep101",
+  "published": "2023-01-01",
+  "group": "Season 1",                      // Optional
+  "remote": "url to remote transcript",     // Optional
+  "words": "Welcome to the podcast...", 
+  "start": [0, 50, 45, 12, ...], 
+  "speaker": "AAABBB...", 
+  "speakers": {                             // Optional
+    "A": "Host Name",
+    "B": "Guest Name"
+  },
+  "segments": {                             // Optional
+    "title": ["Intro", "Interview"],
+    "offset": [0, 15000] 
+  }
+}
+```
+
+#### Field Logic
+
+| Field | Type | Description | Note |
+| --- | --- | --- | --- |
+| `words` | String | The full transcript content. Tokenization is performed by splitting on spaces. | |
+| `start` | Array`<Int>` | **Delta-encoded timestamps** in seconds (all values are integers). | (1) |
+| `speaker` | String | A mapping string. Must have the same length as the number of tokens in `words`. | (2) |
+| `speakers` | Dict | Dictionary mapping single characters to full speaker names. | |
+| `segments` | Dict | Dictionary with two keys, `title` and `offset` naming each segment. Offsets are in seconds. | |
+
+*Note 1*: To calculate the absolute time for word `i`: `Time[i] = Time[i-1] + start[i]`.
+
+*Note 2*: `@` reserves "No Speaker". Other characters map to keys in `speakers`.
+
+### D. Lemmatization (`search_data_lemma.dat`)
+
+This file decompresses to a JSON array containing two objects. It allows the search engine to map query terms (e.g., 
+"ran") to base forms or variations (e.g., "run").
+
+```json
+[
+  { 
+    "ran": "run",
+    "mice": "mouse"
+  },
+  { 
+    "run": ["running", "runs", "runner"]
+  }
+]
+```
+
+* **Index 0 (Complex):** Many-to-one or irregular mappings.
+* **Index 1 (Simple):** One-to-many suffixes.
+
+## 4. Execution Process
+
+1. **Bootstrap:** Agent fetches first 100 bytes of `search_data_00.dat` (JSON).
+2. **Batch List:** Agent fetches the batch list from `search_data_00.dat` as referenced from the bootstrap and decodes 
+    it (GZip JSON)
+3. **Pre Fetch (Optional):** Agent begins pre-fetching each batch item from the batch list from `search_data_XX.dat` 
+    (where XX >= 1) and decodes them (GZip JSON)
+4. **Search:**
+    * Agent iterates through the Batch List.
+    * For each batch, it requests the specific byte range from the corresponding `search_data_XX.dat` file if not 
+        pre-cached.
+    * It decompresses the chunk to get a list of Item Objects.
+    * It performs a string scan on the data in the object.
+
+'''
+
 from urllib.request import Request, urlopen
 import gzip, json, os, sys, textwrap
 
