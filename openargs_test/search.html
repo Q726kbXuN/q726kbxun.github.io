@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" type="image/png" sizes="16x16" href="spyglass.png"/>
 <title>Podcast Search</title>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -20,7 +21,6 @@ body {
   padding: 2rem 1rem 4rem;
 }
 
-/* Status banner */
 #status {
   padding: 0.65rem 1rem;
   border-radius: 8px;
@@ -45,7 +45,6 @@ body {
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* Podcast selector form */
 #podcast-form {
   background: white;
   border-radius: 12px;
@@ -78,7 +77,6 @@ body {
 }
 #load-btn:hover { background: #4f46e5; }
 
-/* Search input */
 #search-box { margin-bottom: 0.75rem; }
 
 #search {
@@ -103,7 +101,6 @@ body {
 }
 #search::placeholder { color: #9ca3af; }
 
-/* Filters */
 #filters {
   background: white;
   border: 1px solid #e5e7eb;
@@ -149,7 +146,6 @@ body {
 }
 .filter-group select:focus { border-color: #6366f1; }
 
-/* Result count */
 #result-count {
   font-size: 0.82rem;
   color: #6b7280;
@@ -157,7 +153,6 @@ body {
   min-height: 1.2em;
 }
 
-/* Result cards */
 .result {
   background: white;
   border-radius: 10px;
@@ -206,7 +201,6 @@ a.result-title:hover { color: #6366f1; text-decoration: underline; }
   margin-bottom: 0.75rem;
 }
 
-/* Moments within a result card */
 .moments { display: flex; flex-direction: column; gap: 0.65rem; }
 
 .moment {
@@ -259,7 +253,6 @@ a.result-title:hover { color: #6366f1; text-decoration: underline; }
 }
 .expand-btn:hover { color: #4f46e5; }
 
-/* No results / empty state */
 #no-results {
   text-align: center;
   padding: 3rem 1rem;
@@ -269,7 +262,6 @@ a.result-title:hover { color: #6366f1; text-decoration: underline; }
 #no-results p { margin-bottom: 0.25rem; }
 #no-results small { font-size: 0.82rem; }
 
-/* Progress bar for loading */
 #progress-bar-wrap {
   height: 3px;
   background: #e5e7eb;
@@ -331,14 +323,12 @@ import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers
 
 env.allowLocalModels = false;
 
-// ── Config ──────────────────────────────────────────────────────────────────
 const THRESHOLD = 0.3;
-const MAX_CHUNK_HITS = 50;       // raw chunk results before grouping by episode
-const MAX_EPISODE_RESULTS = 10;  // episode cards shown
-const MAX_MOMENTS_PER_EP = 3;    // matching timestamps shown per episode
+const MAX_CHUNK_HITS = 50;
+const MAX_EPISODE_RESULTS = 10;
+const MAX_MOMENTS_PER_EP = 3;
 const SNIPPET_LEN = 220;
 
-// ── State ───────────────────────────────────────────────────────────────────
 let extractor = null;
 let episodes = null;
 let chunks = null;
@@ -348,7 +338,6 @@ let shardSize = 1000;
 let podcastId = null;
 const shardCache = {};
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
 function escHtml(s) {
   return String(s ?? '')
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -375,7 +364,6 @@ function getPodcastId() {
   return new URLSearchParams(window.location.search).get('podcast');
 }
 
-// ── Data loading ─────────────────────────────────────────────────────────────
 async function loadData(id) {
   const base = `data/${id}`;
 
@@ -392,9 +380,6 @@ async function loadData(id) {
     fetch(`${base}/chunks.json`).then(r => r.json()),
   ]);
 
-  // Load embedding shards in parallel with progress feedback.
-  // Each embeddings_NNNN.bin file is ≤ 10 MB; total bytes can be derived
-  // from chunk_count and dim so we can track progress without Content-Length.
   const shardCount = manifest.embedding_shard_count;
   setStatus(`Loading embeddings (${shardCount} shard${shardCount !== 1 ? 's' : ''}, ${manifest.chunk_count.toLocaleString()} chunks)…`);
 
@@ -427,7 +412,6 @@ async function loadData(id) {
 
   setProgress(82);
 
-  // Read per-shard headers and concatenate into one flat Float32Array
   const shardArrays = shardBuffers.map(buf => {
     const h = new Uint32Array(buf, 0, 2);
     const rows = h[0], cols = h[1];
@@ -439,7 +423,6 @@ async function loadData(id) {
   let offset = 0;
   for (const shard of shardArrays) { raw.set(shard, offset); offset += shard.length; }
 
-  // Pre-normalize so dot product == cosine similarity
   setStatus('Preparing index…');
   normalizedEmbeddings = new Float32Array(totalRows * embDim);
   for (let i = 0; i < totalRows; i++) {
@@ -459,7 +442,6 @@ async function loadModel() {
   extractor = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
 }
 
-// ── Filter setup ─────────────────────────────────────────────────────────────
 function setupFilters() {
   const years = episodes.map(ep => parseInt(ep.published?.slice(0, 4))).filter(y => !isNaN(y));
   const minYear = Math.min(...years);
@@ -472,7 +454,6 @@ function setupFilters() {
   yearMinEl.value = minYear;
   yearMaxEl.value = maxYear;
 
-  // Collect unique speakers from chunks
   const allSpeakers = new Set();
   for (const chunk of chunks) {
     for (const sp of (chunk.speakers || [])) if (sp.length > 1) allSpeakers.add(sp);
@@ -487,7 +468,7 @@ function setupFilters() {
   document.getElementById('filters').style.display = 'flex';
 
   const triggerSearch = () => {
-    lastQuery = ''; // force re-run even if query text is unchanged
+    lastQuery = '';
     clearTimeout(debounceTimer);
     debounceTimer = setTimeout(handleSearch, 150);
   };
@@ -496,7 +477,6 @@ function setupFilters() {
   speakerSelect.addEventListener('change', triggerSearch);
 }
 
-// ── Lazy shard fetching ───────────────────────────────────────────────────────
 async function fetchChunkTexts(chunkIndices) {
   const neededShards = [...new Set(chunkIndices.map(i => Math.floor(i / shardSize)))];
   await Promise.all(neededShards.map(async shardNum => {
@@ -508,10 +488,9 @@ async function fetchChunkTexts(chunkIndices) {
   return chunkIndices.map(i => shardCache[Math.floor(i / shardSize)][i % shardSize]);
 }
 
-// ── Search ───────────────────────────────────────────────────────────────────
 async function embedQuery(text) {
   const out = await extractor(text, { pooling: 'mean', normalize: true });
-  return out.data; // Float32Array, already L2-normalized
+  return out.data;
 }
 
 function findTopChunks(queryEmb) {
@@ -526,11 +505,9 @@ function findTopChunks(queryEmb) {
     const chunk = chunks[i];
     const ep = episodes[chunk.episode_idx];
 
-    // Date filter
     const year = parseInt(ep.published?.slice(0, 4));
     if (year < yearMin || year > yearMax) continue;
 
-    // Speaker filter
     if (speakerFilter && !(chunk.speakers || []).includes(speakerFilter)) continue;
 
     const offset = i * embDim;
@@ -554,14 +531,13 @@ function groupByEpisode(hits) {
   return [...episodeMap.entries()]
     .map(([epIdx, moments]) => ({
       epIdx,
-      bestScore: moments[0].score, // already sorted descending
+      bestScore: moments[0].score,
       moments: moments.slice(0, MAX_MOMENTS_PER_EP),
     }))
     .sort((a, b) => b.bestScore - a.bestScore)
     .slice(0, MAX_EPISODE_RESULTS);
 }
 
-// ── Rendering ────────────────────────────────────────────────────────────────
 function renderResults(episodeResults, texts) {
   const resultsEl = document.getElementById('results');
   const countEl = document.getElementById('result-count');
@@ -582,7 +558,6 @@ function renderResults(episodeResults, texts) {
     `${totalMoments} moment${totalMoments !== 1 ? 's' : ''} across ` +
     `${epCount} episode${epCount !== 1 ? 's' : ''}`;
 
-  // Map chunk index → fetched text
   const textByIdx = {};
   let ti = 0;
   for (const { moments } of episodeResults) {
@@ -630,7 +605,6 @@ function renderResults(episodeResults, texts) {
       </div>`;
   }).join('');
 
-  // Wire expand/collapse buttons
   resultsEl.querySelectorAll('.expand-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const expanded = btn.dataset.expanded === 'true';
@@ -643,7 +617,6 @@ function renderResults(episodeResults, texts) {
   });
 }
 
-// ── Debounced search handler ──────────────────────────────────────────────────
 let debounceTimer = null;
 let lastQuery = '';
 
@@ -664,7 +637,6 @@ async function handleSearch() {
     const hits = findTopChunks(emb);
     const episodeResults = groupByEpisode(hits);
 
-    // Fetch text only for the chunks we're about to display
     const allChunkIndices = episodeResults.flatMap(r => r.moments.map(m => m.chunkIdx));
     const texts = await fetchChunkTexts(allChunkIndices);
 
@@ -676,7 +648,6 @@ async function handleSearch() {
   }
 }
 
-// ── Init ─────────────────────────────────────────────────────────────────────
 async function init() {
   podcastId = getPodcastId();
 
