@@ -441,8 +441,8 @@ async function loadData(id) {
 
   // Pre-normalize so dot product == cosine similarity
   setStatus('Preparing index…');
-  normalizedEmbeddings = new Float32Array(numChunks * embDim);
-  for (let i = 0; i < numChunks; i++) {
+  normalizedEmbeddings = new Float32Array(totalRows * embDim);
+  for (let i = 0; i < totalRows; i++) {
     const offset = i * embDim;
     let norm = 0;
     for (let j = 0; j < embDim; j++) norm += raw[offset + j] ** 2;
