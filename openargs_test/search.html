@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Podcast Search</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #f0f2f5;
+  color: #1a1a2e;
+  min-height: 100vh;
+}
+
+#app {
+  max-width: 780px;
+  margin: 0 auto;
+  padding: 2rem 1rem 4rem;
+}
+
+/* Status banner */
+#status {
+  padding: 0.65rem 1rem;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+  font-size: 0.875rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+#status.loading { background: #eff6ff; border: 1px solid #bfdbfe; color: #1d4ed8; }
+#status.ready   { background: #f0fdf4; border: 1px solid #bbf7d0; color: #15803d; }
+#status.error   { background: #fef2f2; border: 1px solid #fecaca; color: #dc2626; }
+#status.hidden  { display: none; }
+
+.spinner {
+  width: 14px; height: 14px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Podcast selector form */
+#podcast-form {
+  background: white;
+  border-radius: 12px;
+  padding: 1.5rem;
+  border: 1px solid #e5e7eb;
+  margin-bottom: 1rem;
+}
+#podcast-form p { color: #374151; margin-bottom: 0.75rem; font-size: 0.95rem; }
+#podcast-form .row { display: flex; gap: 0.5rem; }
+#podcast-input {
+  flex: 1;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  outline: none;
+  transition: border-color 0.15s;
+}
+#podcast-input:focus { border-color: #6366f1; }
+#load-btn {
+  padding: 0.6rem 1.25rem;
+  background: #6366f1;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.95rem;
+  font-weight: 500;
+  transition: background 0.15s;
+}
+#load-btn:hover { background: #4f46e5; }
+
+/* Search input */
+#search-box { margin-bottom: 0.75rem; }
+
+#search {
+  width: 100%;
+  padding: 0.85rem 1.1rem;
+  font-size: 1.05rem;
+  border: 2px solid #e5e7eb;
+  border-radius: 10px;
+  outline: none;
+  background: white;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  color: #1a1a2e;
+}
+#search:focus {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+}
+#search:disabled {
+  background: #f9fafb;
+  cursor: not-allowed;
+  color: #9ca3af;
+}
+#search::placeholder { color: #9ca3af; }
+
+/* Filters */
+#filters {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 0.65rem 1rem;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+  gap: 0.6rem 1.5rem;
+  align-items: center;
+  display: none;
+}
+
+.filter-group {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  color: #374151;
+}
+
+.filter-label { font-weight: 500; white-space: nowrap; }
+
+.filter-group input[type="number"] {
+  width: 68px;
+  padding: 0.28rem 0.45rem;
+  border: 1px solid #d1d5db;
+  border-radius: 5px;
+  font-size: 0.85rem;
+  outline: none;
+  color: #1a1a2e;
+}
+.filter-group input[type="number"]:focus { border-color: #6366f1; }
+
+.filter-group select {
+  padding: 0.28rem 0.45rem;
+  border: 1px solid #d1d5db;
+  border-radius: 5px;
+  font-size: 0.85rem;
+  outline: none;
+  background: white;
+  color: #1a1a2e;
+  max-width: 200px;
+}
+.filter-group select:focus { border-color: #6366f1; }
+
+/* Result count */
+#result-count {
+  font-size: 0.82rem;
+  color: #6b7280;
+  margin-bottom: 0.65rem;
+  min-height: 1.2em;
+}
+
+/* Result cards */
+.result {
+  background: white;
+  border-radius: 10px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 0.65rem;
+  border: 1px solid #e5e7eb;
+  transition: box-shadow 0.15s, border-color 0.15s;
+}
+.result:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.07);
+  border-color: #d1d5db;
+}
+
+.result-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin-bottom: 0.3rem;
+}
+
+.result-title {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: #111827;
+  line-height: 1.4;
+  text-decoration: none;
+}
+a.result-title:hover { color: #6366f1; text-decoration: underline; }
+
+.result-score {
+  background: #6366f1;
+  color: white;
+  padding: 0.15rem 0.55rem;
+  border-radius: 20px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+  letter-spacing: 0.01em;
+  flex-shrink: 0;
+}
+
+.result-meta {
+  color: #9ca3af;
+  font-size: 0.78rem;
+  margin-bottom: 0.75rem;
+}
+
+/* Moments within a result card */
+.moments { display: flex; flex-direction: column; gap: 0.65rem; }
+
+.moment {
+  border-left: 2px solid #e5e7eb;
+  padding-left: 0.75rem;
+}
+
+.moment-header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.3rem;
+}
+
+.timestamp {
+  display: inline-flex;
+  align-items: center;
+  background: #eff6ff;
+  color: #2563eb;
+  padding: 0.1rem 0.45rem;
+  border-radius: 4px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.speakers {
+  color: #6b7280;
+  font-size: 0.78rem;
+}
+
+.moment-text {
+  color: #4b5563;
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+
+.expand-btn {
+  display: inline;
+  background: none;
+  border: none;
+  color: #6366f1;
+  font-size: 0.8rem;
+  cursor: pointer;
+  padding: 0;
+  margin-left: 0.35rem;
+  text-decoration: underline;
+  vertical-align: baseline;
+}
+.expand-btn:hover { color: #4f46e5; }
+
+/* No results / empty state */
+#no-results {
+  text-align: center;
+  padding: 3rem 1rem;
+  color: #9ca3af;
+  font-size: 0.95rem;
+}
+#no-results p { margin-bottom: 0.25rem; }
+#no-results small { font-size: 0.82rem; }
+
+/* Progress bar for loading */
+#progress-bar-wrap {
+  height: 3px;
+  background: #e5e7eb;
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: 1rem;
+  display: none;
+}
+#progress-bar {
+  height: 100%;
+  background: #6366f1;
+  width: 0%;
+  transition: width 0.3s ease;
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="podcast-form" style="display:none">
+    <p>Enter the podcast ID to search:</p>
+    <div class="row">
+      <input type="text" id="podcast-input" placeholder="podcast_id" />
+      <button id="load-btn">Load</button>
+    </div>
+  </div>
+
+  <div id="status" class="loading">
+    <div class="spinner"></div>
+    <span id="status-text">Initializing…</span>
+  </div>
+
+  <div id="progress-bar-wrap"><div id="progress-bar"></div></div>
+
+  <div id="search-box" style="display:none">
+    <input type="text" id="search" placeholder="Search for a topic, concept, or question…" disabled autocomplete="off" spellcheck="false" />
+  </div>
+
+  <div id="filters">
+    <div class="filter-group">
+      <span class="filter-label">Year:</span>
+      <input type="number" id="year-min" />
+      <span>–</span>
+      <input type="number" id="year-max" />
+    </div>
+    <div class="filter-group">
+      <span class="filter-label">Speaker:</span>
+      <select id="speaker-select">
+        <option value="">All speakers</option>
+      </select>
+    </div>
+  </div>
+
+  <div id="result-count"></div>
+  <div id="results"></div>
+</div>
+
+<script type="module">
+import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2';
+
+env.allowLocalModels = false;
+
+// ── Config ──────────────────────────────────────────────────────────────────
+const THRESHOLD = 0.3;
+const MAX_CHUNK_HITS = 50;       // raw chunk results before grouping by episode
+const MAX_EPISODE_RESULTS = 10;  // episode cards shown
+const MAX_MOMENTS_PER_EP = 3;    // matching timestamps shown per episode
+const SNIPPET_LEN = 220;
+
+// ── State ───────────────────────────────────────────────────────────────────
+let extractor = null;
+let episodes = null;
+let chunks = null;
+let normalizedEmbeddings = null;
+let embDim = 0;
+let shardSize = 1000;
+let podcastId = null;
+const shardCache = {};
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+function escHtml(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function setStatus(msg, type = 'loading') {
+  const el = document.getElementById('status');
+  if (!msg) { el.className = 'hidden'; return; }
+  el.className = type;
+  el.innerHTML = (type === 'loading')
+    ? `<div class="spinner"></div><span>${escHtml(msg)}</span>`
+    : `<span>${escHtml(msg)}</span>`;
+}
+
+function setProgress(pct) {
+  const wrap = document.getElementById('progress-bar-wrap');
+  const bar = document.getElementById('progress-bar');
+  if (pct >= 100) { wrap.style.display = 'none'; return; }
+  wrap.style.display = 'block';
+  bar.style.width = pct + '%';
+}
+
+function getPodcastId() {
+  return new URLSearchParams(window.location.search).get('podcast');
+}
+
+// ── Data loading ─────────────────────────────────────────────────────────────
+async function loadData(id) {
+  const base = `data/${id}`;
+
+  setStatus('Loading index manifest…');
+  const manifest = await fetch(`${base}/manifest.json`).then(r => {
+    if (!r.ok) throw new Error(`data/${id}/manifest.json not found. Have you run index_data()?`);
+    return r.json();
+  });
+  shardSize = manifest.shard_size || 1000;
+
+  setStatus('Loading episode list and chunk index…');
+  [episodes, chunks] = await Promise.all([
+    fetch(`${base}/episodes.json`).then(r => r.json()),
+    fetch(`${base}/chunks.json`).then(r => r.json()),
+  ]);
+
+  // Load embedding shards in parallel with progress feedback.
+  // Each embeddings_NNNN.bin file is ≤ 10 MB; total bytes can be derived
+  // from chunk_count and dim so we can track progress without Content-Length.
+  const shardCount = manifest.embedding_shard_count;
+  setStatus(`Loading embeddings (${shardCount} shard${shardCount !== 1 ? 's' : ''}, ${manifest.chunk_count.toLocaleString()} chunks)…`);
+
+  const expectedBytes = manifest.chunk_count * manifest.dim * 4 + shardCount * 8;
+  let received = 0;
+
+  const shardBuffers = await Promise.all(
+    Array.from({ length: shardCount }, async (_, i) => {
+      const padded = String(i).padStart(4, '0');
+      const resp = await fetch(`${base}/embeddings_${padded}.bin`);
+      if (!resp.ok) throw new Error(`embeddings_${padded}.bin not found`);
+      if (resp.body) {
+        const reader = resp.body.getReader();
+        const parts = [];
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          parts.push(value);
+          received += value.length;
+          setProgress(Math.round(received / expectedBytes * 80));
+        }
+        return new Blob(parts).arrayBuffer();
+      }
+      const buf = await resp.arrayBuffer();
+      received += buf.byteLength;
+      setProgress(Math.round(received / expectedBytes * 80));
+      return buf;
+    })
+  );
+
+  setProgress(82);
+
+  // Read per-shard headers and concatenate into one flat Float32Array
+  const shardArrays = shardBuffers.map(buf => {
+    const h = new Uint32Array(buf, 0, 2);
+    const rows = h[0], cols = h[1];
+    if (!embDim) embDim = cols;
+    return new Float32Array(buf, 8, rows * cols);
+  });
+  const totalRows = shardArrays.reduce((n, s) => n + s.length / embDim, 0);
+  const raw = new Float32Array(totalRows * embDim);
+  let offset = 0;
+  for (const shard of shardArrays) { raw.set(shard, offset); offset += shard.length; }
+
+  // Pre-normalize so dot product == cosine similarity
+  setStatus('Preparing index…');
+  normalizedEmbeddings = new Float32Array(numChunks * embDim);
+  for (let i = 0; i < numChunks; i++) {
+    const offset = i * embDim;
+    let norm = 0;
+    for (let j = 0; j < embDim; j++) norm += raw[offset + j] ** 2;
+    norm = Math.sqrt(norm) + 1e-10;
+    for (let j = 0; j < embDim; j++) {
+      normalizedEmbeddings[offset + j] = raw[offset + j] / norm;
+    }
+  }
+  setProgress(100);
+}
+
+async function loadModel() {
+  setStatus('Loading embedding model (first visit downloads ~25 MB)…');
+  extractor = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
+}
+
+// ── Filter setup ─────────────────────────────────────────────────────────────
+function setupFilters() {
+  const years = episodes.map(ep => parseInt(ep.published?.slice(0, 4))).filter(y => !isNaN(y));
+  const minYear = Math.min(...years);
+  const maxYear = Math.max(...years);
+
+  const yearMinEl = document.getElementById('year-min');
+  const yearMaxEl = document.getElementById('year-max');
+  yearMinEl.min = yearMaxEl.min = minYear;
+  yearMinEl.max = yearMaxEl.max = maxYear;
+  yearMinEl.value = minYear;
+  yearMaxEl.value = maxYear;
+
+  // Collect unique speakers from chunks
+  const allSpeakers = new Set();
+  for (const chunk of chunks) {
+    for (const sp of (chunk.speakers || [])) if (sp.length > 1) allSpeakers.add(sp);
+  }
+  const speakerSelect = document.getElementById('speaker-select');
+  for (const sp of [...allSpeakers].sort()) {
+    const opt = document.createElement('option');
+    opt.value = opt.textContent = sp;
+    speakerSelect.appendChild(opt);
+  }
+
+  document.getElementById('filters').style.display = 'flex';
+
+  const triggerSearch = () => {
+    lastQuery = ''; // force re-run even if query text is unchanged
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(handleSearch, 150);
+  };
+  yearMinEl.addEventListener('change', triggerSearch);
+  yearMaxEl.addEventListener('change', triggerSearch);
+  speakerSelect.addEventListener('change', triggerSearch);
+}
+
+// ── Lazy shard fetching ───────────────────────────────────────────────────────
+async function fetchChunkTexts(chunkIndices) {
+  const neededShards = [...new Set(chunkIndices.map(i => Math.floor(i / shardSize)))];
+  await Promise.all(neededShards.map(async shardNum => {
+    if (shardCache[shardNum] !== undefined) return;
+    const padded = String(shardNum).padStart(4, '0');
+    shardCache[shardNum] = await fetch(`data/${podcastId}/chunks_text_${padded}.json`)
+      .then(r => r.json());
+  }));
+  return chunkIndices.map(i => shardCache[Math.floor(i / shardSize)][i % shardSize]);
+}
+
+// ── Search ───────────────────────────────────────────────────────────────────
+async function embedQuery(text) {
+  const out = await extractor(text, { pooling: 'mean', normalize: true });
+  return out.data; // Float32Array, already L2-normalized
+}
+
+function findTopChunks(queryEmb) {
+  const yearMin = parseInt(document.getElementById('year-min').value);
+  const yearMax = parseInt(document.getElementById('year-max').value);
+  const speakerFilter = document.getElementById('speaker-select').value;
+
+  const numChunks = normalizedEmbeddings.length / embDim;
+  const hits = [];
+
+  for (let i = 0; i < numChunks; i++) {
+    const chunk = chunks[i];
+    const ep = episodes[chunk.episode_idx];
+
+    // Date filter
+    const year = parseInt(ep.published?.slice(0, 4));
+    if (year < yearMin || year > yearMax) continue;
+
+    // Speaker filter
+    if (speakerFilter && !(chunk.speakers || []).includes(speakerFilter)) continue;
+
+    const offset = i * embDim;
+    let dot = 0;
+    for (let j = 0; j < embDim; j++) dot += normalizedEmbeddings[offset + j] * queryEmb[j];
+    if (dot >= THRESHOLD) hits.push([i, dot]);
+  }
+
+  hits.sort((a, b) => b[1] - a[1]);
+  return hits.slice(0, MAX_CHUNK_HITS);
+}
+
+function groupByEpisode(hits) {
+  const episodeMap = new Map();
+  for (const [chunkIdx, score] of hits) {
+    const epIdx = chunks[chunkIdx].episode_idx;
+    if (!episodeMap.has(epIdx)) episodeMap.set(epIdx, []);
+    episodeMap.get(epIdx).push({ chunkIdx, score });
+  }
+
+  return [...episodeMap.entries()]
+    .map(([epIdx, moments]) => ({
+      epIdx,
+      bestScore: moments[0].score, // already sorted descending
+      moments: moments.slice(0, MAX_MOMENTS_PER_EP),
+    }))
+    .sort((a, b) => b.bestScore - a.bestScore)
+    .slice(0, MAX_EPISODE_RESULTS);
+}
+
+// ── Rendering ────────────────────────────────────────────────────────────────
+function renderResults(episodeResults, texts) {
+  const resultsEl = document.getElementById('results');
+  const countEl = document.getElementById('result-count');
+
+  if (!episodeResults.length) {
+    countEl.textContent = '';
+    resultsEl.innerHTML = `
+      <div id="no-results">
+        <p>No results found.</p>
+        <small>Try different search terms, or adjust the year/speaker filters.</small>
+      </div>`;
+    return;
+  }
+
+  const totalMoments = episodeResults.reduce((n, r) => n + r.moments.length, 0);
+  const epCount = episodeResults.length;
+  countEl.textContent =
+    `${totalMoments} moment${totalMoments !== 1 ? 's' : ''} across ` +
+    `${epCount} episode${epCount !== 1 ? 's' : ''}`;
+
+  // Map chunk index → fetched text
+  const textByIdx = {};
+  let ti = 0;
+  for (const { moments } of episodeResults) {
+    for (const { chunkIdx } of moments) textByIdx[chunkIdx] = texts[ti++];
+  }
+
+  resultsEl.innerHTML = episodeResults.map(({ epIdx, bestScore, moments }) => {
+    const ep = episodes[epIdx];
+    const pct = Math.round(bestScore * 100);
+
+    const titleHtml = ep.link
+      ? `<a class="result-title" href="${escHtml(ep.link)}" target="_blank" rel="noopener">${escHtml(ep.title)}</a>`
+      : `<span class="result-title">${escHtml(ep.title)}</span>`;
+
+    const momentsHtml = moments.map(({ chunkIdx }) => {
+      const chunk = chunks[chunkIdx];
+      const text = textByIdx[chunkIdx] || '';
+      const short = text.length > SNIPPET_LEN ? text.slice(0, SNIPPET_LEN).trimEnd() : text;
+      const hasMore = text.length > SNIPPET_LEN;
+      const spkStr = (chunk.speakers || []).join(', ');
+
+      return `
+        <div class="moment">
+          <div class="moment-header">
+            <span class="timestamp">${escHtml(chunk.start)}</span>
+            ${spkStr ? `<span class="speakers">${escHtml(spkStr)}</span>` : ''}
+          </div>
+          <div class="moment-text">
+            <span class="snip-short">${escHtml(short)}${hasMore ? '…' : ''}</span>${hasMore
+              ? `<span class="snip-full" style="display:none">${escHtml(text)}</span
+                ><button class="expand-btn" data-expanded="false">Show&nbsp;more</button>`
+              : ''}
+          </div>
+        </div>`;
+    }).join('');
+
+    return `
+      <div class="result">
+        <div class="result-header">
+          ${titleHtml}
+          <div class="result-score">${pct}%</div>
+        </div>
+        <div class="result-meta">${escHtml(ep.feed)} · ${escHtml(ep.published)}</div>
+        <div class="moments">${momentsHtml}</div>
+      </div>`;
+  }).join('');
+
+  // Wire expand/collapse buttons
+  resultsEl.querySelectorAll('.expand-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const expanded = btn.dataset.expanded === 'true';
+      const textDiv = btn.closest('.moment-text');
+      textDiv.querySelector('.snip-short').style.display = expanded ? '' : 'none';
+      textDiv.querySelector('.snip-full').style.display = expanded ? 'none' : '';
+      btn.dataset.expanded = String(!expanded);
+      btn.innerHTML = expanded ? 'Show&nbsp;more' : 'Show&nbsp;less';
+    });
+  });
+}
+
+// ── Debounced search handler ──────────────────────────────────────────────────
+let debounceTimer = null;
+let lastQuery = '';
+
+async function handleSearch() {
+  const query = document.getElementById('search').value.trim();
+  if (query === lastQuery) return;
+  lastQuery = query;
+
+  if (query.length < 2) {
+    document.getElementById('results').innerHTML = '';
+    document.getElementById('result-count').textContent = '';
+    return;
+  }
+
+  setStatus('Searching…');
+  try {
+    const emb = await embedQuery(query);
+    const hits = findTopChunks(emb);
+    const episodeResults = groupByEpisode(hits);
+
+    // Fetch text only for the chunks we're about to display
+    const allChunkIndices = episodeResults.flatMap(r => r.moments.map(m => m.chunkIdx));
+    const texts = await fetchChunkTexts(allChunkIndices);
+
+    renderResults(episodeResults, texts);
+    setStatus('', 'hidden');
+  } catch (e) {
+    setStatus('Search error: ' + e.message, 'error');
+    console.error(e);
+  }
+}
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+async function init() {
+  podcastId = getPodcastId();
+
+  if (!podcastId) {
+    document.getElementById('podcast-form').style.display = 'block';
+    const statusEl = document.getElementById('status');
+    statusEl.className = 'loading';
+    statusEl.innerHTML = '<span>Enter a podcast ID to get started.</span>';
+
+    document.getElementById('podcast-input').addEventListener('keydown', e => {
+      if (e.key === 'Enter') document.getElementById('load-btn').click();
+    });
+    document.getElementById('load-btn').addEventListener('click', () => {
+      const id = document.getElementById('podcast-input').value.trim();
+      if (id) window.location.search = `?podcast=${encodeURIComponent(id)}`;
+    });
+    return;
+  }
+
+  document.getElementById('search-box').style.display = 'block';
+
+  try {
+    await loadData(podcastId);
+    await loadModel();
+
+    setupFilters();
+
+    const searchEl = document.getElementById('search');
+    searchEl.disabled = false;
+    searchEl.focus();
+
+    setStatus(
+      `Ready — ${chunks.length.toLocaleString()} chunks from ${episodes.length.toLocaleString()} episodes.`,
+      'ready'
+    );
+
+    searchEl.addEventListener('input', () => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(handleSearch, 280);
+    });
+    searchEl.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { clearTimeout(debounceTimer); handleSearch(); }
+    });
+  } catch (err) {
+    setStatus(err.message, 'error');
+    console.error(err);
+  }
+}
+
+init();
+</script>
+</body>
+</html>
