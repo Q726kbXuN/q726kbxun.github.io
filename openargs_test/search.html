@@ -276,6 +276,13 @@ a.result-title:hover { color: #6366f1; text-decoration: underline; }
   width: 0%;
   transition: width 0.3s ease;
 }
+
+#index-footer {
+  margin-top: 2rem;
+  text-align: center;
+  font-size: 0.75rem;
+  color: #9ca3af;
+}
 </style>
 </head>
 <body>
@@ -324,6 +331,7 @@ a.result-title:hover { color: #6366f1; text-decoration: underline; }
 
   <div id="result-count"></div>
   <div id="results"></div>
+  <div id="index-footer"></div>
 </div>
 
 <script type="module">
@@ -344,6 +352,7 @@ let normalizedEmbeddings = null;
 let embDim = 0;
 let shardSize = 1000;
 let podcastId = null;
+let manifest = null;
 const shardCache = {};
 
 function escHtml(s) {
@@ -376,7 +385,7 @@ async function loadData(id) {
   const base = `data/${id}`;
 
   setStatus('Loading index manifest…');
-  const manifest = await fetch(`${base}/manifest.json`).then(r => {
+  manifest = await fetch(`${base}/manifest.json`).then(r => {
     if (!r.ok) throw new Error(`data/${id}/manifest.json not found. Have you run index_data()?`);
     return r.json();
   });
@@ -701,6 +710,11 @@ async function init() {
       `Ready — ${chunks.length.toLocaleString()} chunks from ${episodes.length.toLocaleString()} episodes.`,
       'ready'
     );
+
+    if (manifest.last_updated) {
+      document.getElementById('index-footer').textContent =
+        `Index last updated ${manifest.last_updated}`;
+    }
 
     searchEl.addEventListener('input', () => {
       clearTimeout(debounceTimer);
