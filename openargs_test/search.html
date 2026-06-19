@@ -227,6 +227,13 @@ a.result-title:hover { color: #6366f1; text-decoration: underline; }
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
+a.timestamp {
+  text-decoration: none;
+  cursor: pointer;
+}
+a.timestamp:hover {
+  background: #dbeafe;
+}
 
 .speakers {
   color: #6b7280;
@@ -358,6 +365,15 @@ const shardCache = {};
 function escHtml(s) {
   return String(s ?? '')
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// Deep link into a source video at a given timestamp, when the episode link is
+// a YouTube URL. Returns null for non-YouTube links (e.g. podcast episode pages).
+function timestampLink(link, startStr) {
+  if (!link || !/(?:youtube\.com\/watch|youtu\.be\/)/.test(link)) return null;
+  let secs = 0;
+  for (const p of String(startStr).split(':')) secs = secs * 60 + (parseInt(p, 10) || 0);
+  return link + (link.includes('?') ? '&' : '?') + 't=' + secs + 's';
 }
 
 function setStatus(msg, type = 'loading') {
@@ -605,11 +621,15 @@ function renderResults(episodeResults, texts) {
       const short = text.length > SNIPPET_LEN ? text.slice(0, SNIPPET_LEN).trimEnd() : text;
       const hasMore = text.length > SNIPPET_LEN;
       const spkStr = (chunk.speakers || []).join(', ');
+      const tLink = timestampLink(ep.link, chunk.start);
+      const tsHtml = tLink
+        ? `<a class="timestamp" href="${escHtml(tLink)}" target="_blank" rel="noopener">${escHtml(chunk.start)}</a>`
+        : `<span class="timestamp">${escHtml(chunk.start)}</span>`;
 
       return `
         <div class="moment">
           <div class="moment-header">
-            <span class="timestamp">${escHtml(chunk.start)}</span>
+            ${tsHtml}
             ${spkStr ? `<span class="speakers">${escHtml(spkStr)}</span>` : ''}
           </div>
           <div class="moment-text">
