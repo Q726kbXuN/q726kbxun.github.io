@@ -1,31 +1,52 @@
 #!/usr/bin/env python3
 AGENT_HELP = """
 -- Agent Help -----------------------------------------------------------------
-Answering "find the episode where ..." questions, in order:
-1. `rank "topic keywords" --limit 10 --summaries` finds episodes by topic
-   (add `--transcripts` to rank by what was actually said, not just the
-   episode blurbs).
-2. `search "concrete phrase" --counts` finds exact language. Memories are
+Fastest path for "find the episode where ..." questions:
+0. `find "natural language question" --limit 5` does the whole loop at once:
+   it blend-ranks episodes and prints a confirming quote for each, with the
+   speaker, chapter title, timestamp, and anchor. Add `--semantic` to also
+   reach episodes that phrase the idea differently. Start here, then use the
+   steps below to dig deeper or verify.
+
+Finer control, roughly in order:
+1. `rank "topic keywords" --limit 10 --summaries` ranks by topic; `--transcripts`
+   ranks by what was actually said, `--blend` fuses transcript + summary +
+   chapter-title signal, `--semantic` also weighs words that co-occur with the
+   query across the archive.
+2. `segments "topic"` searches the human-written chapter titles -- the highest
+   precision way to land on the exact news item or interview. `segments
+   --episode "Title"` lists one episode's chapters.
+3. `search "concrete phrase" --counts` finds exact language. Memories are
    unreliable and transcripts contain errors, so when a phrase misses, retry
-   with `--similar` (other word forms: fly/flies/flew), `--fuzzy` (close
-   spellings that occur in the archive), or `--any` (whole-word OR).
-3. `near "fly,insect,bug" "robot,machine" --window 40 --similar` finds
-   passages where some word from EVERY group lands close together. Use it for
-   paraphrased claims and analogies ("the guest said X is like Y"): the
-   user's exact nouns are often wrong, so list synonyms in each group.
-4. `vocab robo --fuzzy` shows which related words and misspellings really
-   occur in the transcripts, to steer the next query.
-5. Verify before answering: `context "phrase" --episode "Title"`, or
+   with `--similar` (fly/flies/flew), `--fuzzy` (close spellings), `--phonetic`
+   (sound-alike or mis-heard names: Cara/Kara), or `--any` (whole-word OR). Add
+   `--speaker Cara` to keep only what one host said, `--sort relevance` to put
+   the densest episodes first.
+4. `near "fly,insect,bug" "robot,machine" --window 40 --similar` finds passages
+   where some word from EVERY group lands close together (paraphrases,
+   analogies): the user's exact nouns are often wrong, so list synonyms per
+   group. `--speaker` works here too.
+5. Who's talking: `speakers` lists the recurring cast with word counts;
+   `speakers --episode "Title"` breaks down one episode.
+6. `vocab robo --fuzzy --phonetic` shows which related words and spellings
+   really occur, to steer the next query; `trends "topic"` charts mentions per
+   year.
+7. Verify before answering: `context "phrase" --episode "Title"`, or
    `transcript "Title" --start 0:17:30 --end 0:21:00 --timestamps`.
-6. Report: title, date, link, a confirming quote, its timestamp, and the
-   `search.html#...` anchor (see below).
+8. Report: title, date, link, a confirming quote, its speaker + timestamp, and
+   the `search.html#...` anchor (see below).
+
+Degrades gracefully: archives without chapter markers or named speakers just
+omit those fields -- `segments`/`speakers` say so plainly rather than inventing
+data (some feeds only have positional speakers A/B that do not carry between
+episodes).
 
 Cutting down on permission prompts and process startups:
 - Fold several probes into ONE invocation with `batch` (one approval, one
   archive load, shared caches; add --json for a single JSON array):
       python3 search_helper.py batch \\
-          'rank "octopus camouflage" --limit 5' \\
-          'search "like a robot" --similar --counts' \\
+          'find "octopus camouflage" --limit 3' \\
+          'segments "camouflage"' \\
           'near "fly,insect" "robot,computer" --window 40 --similar'
 - This script only reads the archive and maintains one cache file beside it,
   so it is safe to pre-approve. Claude Code `.claude/settings.json`:
@@ -33,11 +54,14 @@ Cutting down on permission prompts and process startups:
 
 Fast paths:
 - `--json` on most commands for machine-readable output; notes go to stderr.
-- `--since/--until YYYY-MM-DD` narrow every scan.
+  search/near/context hits carry the speaker, chapter title, and matched word.
+- `--since/--until YYYY-MM-DD` narrow every scan; `--context-words N` trims
+  snippets to N words on each side (instead of `--context` characters).
 - `search` matches substrings; `--regex` unlocks alternation and wildcards.
 - Keyword hits lie. Confirm with `context` before quoting a result.
 - First use builds `search_helper_cache.sqlite3` next to the data files: an
-  ephemeral cache, rebuilt automatically when the archive changes, safe to
+  ephemeral cache (transcripts, a word table, a term index, a speaker roster,
+  and chapter markers), rebuilt automatically when the archive changes, safe to
   delete, skipped with `--no-cache`. The .dat files stay the source of truth.
 
 -- Linking back to the Web UI -------------------------------------------------
@@ -96,24 +120,30 @@ seek()s.
 
 -- Ancillary files ------------------------------------------------------------
 On first use the script builds `search_helper_cache.sqlite3` beside the data
-files: transcripts plus a word-frequency table, so repeated runs skip the
-decompress-everything step. It is a disposable cache — rebuilt automatically
-whenever the `search_data_NN.dat` files change, safe to delete, skipped with
-`--no-cache`. The .dat archive files remain the only source of truth.
+files: transcripts, a word-frequency table, a selective term index (postings)
+for fast candidate lookup, an archive-wide speaker roster, and precomputed
+chapter markers, so repeated runs skip the decompress-everything step. It is a
+disposable cache — rebuilt automatically whenever the `search_data_NN.dat`
+files change, safe to delete, skipped with `--no-cache`. The .dat archive files
+remain the only source of truth.
 
 -- Usage ----------------------------------------------------------------------
 python3 search_helper.py                  (full help, including agent tips)
 python3 search_helper.py info
 python3 search_helper.py list [--limit N] [--since YYYY-MM-DD]
-python3 search_helper.py search "search term" [--all|--any] [--similar] [--fuzzy] [--regex]
-python3 search_helper.py near "fly,insect" "robot,machine" [--window 50] [--similar]
-python3 search_helper.py vocab robo [--fuzzy]
-python3 search_helper.py context "search term" --episode "Blackstock"
+python3 search_helper.py find "natural language question" [--semantic] [--limit 5]
+python3 search_helper.py search "term" [--all|--any] [--similar] [--fuzzy] [--phonetic] [--regex] [--speaker NAME] [--sort relevance]
+python3 search_helper.py near "fly,insect" "robot,machine" [--window 50] [--similar] [--speaker NAME]
+python3 search_helper.py segments "topic"   |   segments --episode "Title"
+python3 search_helper.py speakers           |   speakers --episode "Title"
+python3 search_helper.py vocab robo [--fuzzy] [--phonetic] [--since YYYY-MM-DD]
+python3 search_helper.py trends "topic" [--since YYYY-MM-DD]
+python3 search_helper.py context "term" --episode "Blackstock" [--speaker NAME]
 python3 search_helper.py transcript "Episode" [--timestamps] [--start 0:10:00 --end 0:12:00]
 python3 search_helper.py summaries "search term"
-python3 search_helper.py rank "search term" [--transcripts]
+python3 search_helper.py rank "search term" [--transcripts|--blend] [--semantic]
 python3 search_helper.py cache [--rebuild|--delete]
-python3 search_helper.py batch 'search "mars" --counts' 'rank "ocean" --limit 5'
+python3 search_helper.py batch 'find "mars"' 'segments "ocean"' 'speakers'
 
 Add `--json` to most commands for machine-readable output. By default the
 archive directory is the script's own folder; override with
@@ -141,7 +171,7 @@ except ImportError:
     sqlite3 = None
 
 CACHE_NAME = "search_helper_cache.sqlite3"
-CACHE_SCHEMA = "1"
+CACHE_SCHEMA = "2"
 LEMMA_NAME = "search_data_lemma.dat"
 
 Row = collections.namedtuple("Row", "anchor published title link summary words episode")
@@ -157,6 +187,8 @@ class Archive:
         self._cache_tried = False
         self._vocab = None
         self._stems = None
+        self._phon = None
+        self._sem_cache = {}
         self._lemma = False
         self.header = self._load_header()
         self.batch_slices = self._read_gzip_slice(*self.header["data"])
@@ -179,7 +211,11 @@ class Archive:
     def batch(self, batch_slice):
         key = tuple(batch_slice)
         if key not in self._batch_cache:
-            self._batch_cache[key] = self._read_gzip_slice(*batch_slice)
+            episodes = self._read_gzip_slice(*batch_slice)
+            for episode in episodes:
+                if episode.get("link"):
+                    episode["link"] = clean_link(episode["link"])
+            self._batch_cache[key] = episodes
         return self._batch_cache[key]
 
     def episodes(self):
@@ -204,16 +240,17 @@ class Archive:
             self._cache = open_cache(self)
         return self._cache
 
-    def rows(self, since=None, until=None):
+    def rows(self, since=None, until=None, ids=None):
         """Yield a Row per episode, from the sqlite cache when available.
 
         Row.episode is the full episode dict on the slow path and None on the
         cached path; use episode_at(row.anchor) when word timings or speakers
-        are needed.
+        are needed. `ids` restricts to a set of cached episode ids (from
+        or_candidates); it is honored only on the cached path.
         """
         cache = self.cache()
         if cache:
-            yield from cache.rows(since, until)
+            yield from cache.rows(since, until, ids)
             return
         for anchor, episode in self.episodes():
             published = episode.get("published", "")
@@ -222,6 +259,24 @@ class Archive:
             yield Row(anchor, published, episode.get("title", ""),
                       episode.get("link", ""), episode.get("summary", "") or "",
                       episode.get("words", ""), episode)
+
+    def or_candidates(self, tokens):
+        """Cached episode ids containing any of `tokens`, or None to scan all."""
+        cache = self.cache()
+        return cache.or_candidates(tokens) if cache else None
+
+    def count_rows(self, since=None, until=None):
+        cache = self.cache()
+        if cache:
+            return cache.count(since, until)
+        return sum(1 for _ in self.rows(since, until))
+
+    def capabilities(self):
+        cache = self.cache()
+        if cache and cache.meta.get("schema") == CACHE_SCHEMA:
+            return {"segments": cache.meta.get("has_segments") == "1",
+                    "speaker_names": cache.meta.get("has_speaker_names") == "1"}
+        return None
 
     def vocab(self):
         """Map every transcript word to (episode count, total occurrences)."""
@@ -259,6 +314,13 @@ class Archive:
                 self._stems.setdefault(light_stem(term), []).append(term)
         return self._stems
 
+    def phonetic_groups(self):
+        if self._phon is None:
+            self._phon = {}
+            for term in self.vocab():
+                self._phon.setdefault(phonetic_key(term), []).append(term)
+        return self._phon
+
 def note(message):
     print(f"note: {message}", file=sys.stderr)
 
@@ -276,7 +338,9 @@ class Cache:
         self.path = path
         self.meta = dict(conn.execute("SELECT key, value FROM meta"))
 
-    def rows(self, since=None, until=None):
+    def rows(self, since=None, until=None, ids=None):
+        if ids is not None and not ids:
+            return
         sql = ("SELECT file, start, length, item, published, title, link, "
                "summary, words FROM episodes")
         conds, params = [], []
@@ -286,16 +350,87 @@ class Cache:
         if until:
             conds.append("published <= ?")
             params.append(until)
+        # Only push an id filter down when it is small enough for SQLite's
+        # bound-parameter limit; larger sets fall back to a full scan (the
+        # caller still verifies each row, so this is a speed knob, not
+        # correctness).
+        if ids is not None and len(ids) <= 900:
+            conds.append("id IN (%s)" % ",".join("?" * len(ids)))
+            params.extend(ids)
         if conds:
             sql += " WHERE " + " AND ".join(conds)
         for (file_num, start, length, item, published, title, link, summary,
              words) in self.conn.execute(sql + " ORDER BY id", params):
-            yield Row((file_num, start, length, item), published, title, link,
-                      summary, words, None)
+            yield Row((file_num, start, length, item), published, title,
+                      clean_link(link), summary, words, None)
 
     def vocab(self):
         return {term: (episodes, total) for term, episodes, total
                 in self.conn.execute("SELECT term, episodes, total FROM vocab")}
+
+    def count(self, since=None, until=None):
+        if not since and not until:
+            return int(self.meta.get("episodes", 0))
+        sql, conds, params = "SELECT COUNT(*) FROM episodes", [], []
+        if since:
+            conds.append("published >= ?")
+            params.append(since)
+        if until:
+            conds.append("published <= ?")
+            params.append(until)
+        if conds:
+            sql += " WHERE " + " AND ".join(conds)
+        return self.conn.execute(sql, params).fetchone()[0]
+
+    def has_postings(self):
+        return self.meta.get("has_postings") == "1"
+
+    def _token_ids(self, token):
+        """Episode ids containing `token`: a set if indexed, the string
+        'common' if present but too frequent to index, 'absent' if unknown."""
+        row = self.conn.execute("SELECT eps FROM postings WHERE term = ?", (token,)).fetchone()
+        if row is not None:
+            return set(json.loads(row[0]))
+        row = self.conn.execute("SELECT 1 FROM vocab WHERE term = ?", (token,)).fetchone()
+        return "common" if row else "absent"
+
+    def or_candidates(self, tokens):
+        """Episode ids containing ANY of `tokens`, or None if that cannot be
+        bounded (a token is too common to be indexed)."""
+        if not self.has_postings():
+            return None
+        union = set()
+        for token in tokens:
+            ids = self._token_ids(token)
+            if ids == "common":
+                return None
+            if ids == "absent":
+                continue
+            union |= ids
+        return union
+
+    def speaker_roster(self):
+        return list(self.conn.execute(
+            "SELECT name, words, episodes FROM speakers ORDER BY words DESC"))
+
+    def segment_rows(self, since=None, until=None):
+        sql = ("SELECT e.published, e.title, e.link, e.file, e.start, e.length, "
+               "e.item, s.offset, s.word_index, s.title FROM segments s "
+               "JOIN episodes e ON e.id = s.episode_id")
+        conds, params = [], []
+        if since:
+            conds.append("e.published >= ?")
+            params.append(since)
+        if until:
+            conds.append("e.published <= ?")
+            params.append(until)
+        if conds:
+            sql += " WHERE " + " AND ".join(conds)
+        sql += " ORDER BY e.published, s.offset"
+        for (pub, title, link, file_num, start, length, item, offset, wi,
+             seg_title) in self.conn.execute(sql, params):
+            yield (pub, title, clean_link(link), (file_num, start, length, item),
+                   offset, wi, seg_title)
 
 def open_cache(archive):
     if sqlite3 is None:
@@ -335,26 +470,73 @@ def build_cache(archive, path, fingerprint):
                 title TEXT, link TEXT, summary TEXT, words TEXT);
             CREATE TABLE vocab (term TEXT PRIMARY KEY, episodes INTEGER,
                 total INTEGER);
+            CREATE TABLE postings (term TEXT PRIMARY KEY, eps TEXT);
+            CREATE TABLE speakers (name TEXT PRIMARY KEY, words INTEGER,
+                episodes INTEGER);
+            CREATE TABLE segments (episode_id INTEGER, offset INTEGER,
+                word_index INTEGER, title TEXT);
         """)
-        doc_freq, totals, episode_count = collections.Counter(), collections.Counter(), 0
-        for anchor, episode in archive.episodes():
+        doc_freq, totals = collections.Counter(), collections.Counter()
+        postings = collections.defaultdict(list)
+        name_words, name_eps = collections.Counter(), collections.Counter()
+        segment_rows = []
+        unnamed_words = eps_with_names = episode_count = 0
+        has_segments = False
+        for episode_id, (anchor, episode) in enumerate(archive.episodes(), start=1):
             words = episode.get("words", "")
             conn.execute(
-                "INSERT INTO episodes VALUES (NULL,?,?,?,?,?,?,?,?,?)",
-                (anchor[0], anchor[1], anchor[2], anchor[3],
+                "INSERT INTO episodes VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (episode_id, anchor[0], anchor[1], anchor[2], anchor[3],
                  episode.get("published", ""), episode.get("title", ""),
                  episode.get("link", ""), episode.get("summary", "") or "", words))
             counts = collections.Counter(tokenize(words))
             totals.update(counts)
             doc_freq.update(counts.keys())
+            for term in counts:
+                postings[term].append(episode_id)
             episode_count += 1
+
+            names = episode.get("speakers") or {}
+            local = collections.Counter()
+            for ch in episode.get("speaker", ""):
+                local[names.get(ch)] += 1
+            named = {name: n for name, n in local.items() if name is not None}
+            if named:
+                eps_with_names += 1
+                for name, n in named.items():
+                    name_words[name] += n
+                    name_eps[name] += 1
+            unnamed_words += local.get(None, 0)
+
+            offsets, titles = segment_lookup(episode)
+            if offsets:
+                has_segments = True
+                times = word_timestamps(episode.get("start", []))
+                for off, title in zip(offsets, titles):
+                    wi = bisect.bisect_left(times, off) if times else 0
+                    segment_rows.append((episode_id, off, wi, title))
+
         conn.executemany("INSERT INTO vocab VALUES (?,?,?)",
                          ((term, doc_freq[term], totals[term]) for term in totals))
+        # Index only selective terms; ones present in most episodes never narrow
+        # a query and would bloat the cache with the largest posting lists.
+        threshold = max(1, episode_count // 2)
+        conn.executemany("INSERT INTO postings VALUES (?,?)",
+                         ((term, json.dumps(ids)) for term, ids in postings.items()
+                          if len(ids) <= threshold))
+        conn.executemany("INSERT INTO speakers VALUES (?,?,?)",
+                         ((name, name_words[name], name_eps[name]) for name in name_words))
+        conn.executemany("INSERT INTO segments VALUES (?,?,?,?)", segment_rows)
         conn.executemany("INSERT INTO meta VALUES (?,?)", [
             ("schema", CACHE_SCHEMA),
             ("fingerprint", fingerprint),
             ("built", time.strftime("%Y-%m-%d %H:%M:%S")),
             ("episodes", str(episode_count)),
+            ("episodes_with_names", str(eps_with_names)),
+            ("unnamed_words", str(unnamed_words)),
+            ("has_segments", "1" if has_segments else "0"),
+            ("has_speaker_names", "1" if name_words else "0"),
+            ("has_postings", "1"),
         ])
         conn.commit()
         conn.close()
@@ -428,7 +610,67 @@ def speaker_labels(episode):
             next_letter += 1
     return labels
 
-Hit = collections.namedtuple("Hit", "anchor episode word_index snippet timestamp")
+def clean_link(link):
+    """Some archives store the episode URL twice, pipe-joined ("url|url").
+    Return a single canonical URL; keep genuinely distinct URLs space-joined."""
+    if not link or "|" not in link:
+        return link
+    seen, out = set(), []
+    for part in (piece.strip() for piece in link.split("|")):
+        if part and part not in seen:
+            seen.add(part)
+            out.append(part)
+    return " ".join(out) if out else link
+
+def segment_lookup(episode):
+    """Return (offsets, titles) for an episode's chapter markers, sorted by
+    time. ([], []) when the archive carries no segment data, so callers that
+    zip/bisect these degrade to "no segment" automatically."""
+    seg = episode.get("segments") or {}
+    offsets, titles = seg.get("offset") or [], seg.get("title") or []
+    if not offsets or not titles:
+        return [], []
+    pairs = sorted(zip(offsets, titles))
+    return [pair[0] for pair in pairs], [pair[1] for pair in pairs]
+
+def segment_at(offsets, titles, timestamp):
+    """Title of the chapter a timestamp falls in, or None (before the first
+    marker, or when the archive has no segments)."""
+    if not offsets:
+        return None
+    idx = bisect.bisect_right(offsets, timestamp) - 1
+    return titles[idx] if idx >= 0 else None
+
+def named_speaker_at(names, speaker_chars, word_index):
+    """Display name of the speaker of word `word_index`, using ONLY the
+    episode's explicit `speakers` map. Returns None when the word is unknown
+    or the speaker is unnamed (e.g. archives whose speakers are bare A/B
+    letters that do not correlate across episodes), so attribution simply
+    disappears rather than emitting a meaningless label."""
+    if word_index < len(speaker_chars):
+        return names.get(speaker_chars[word_index])
+    return None
+
+def speakers_matching(episode, target):
+    """Set of this episode's speaker CHARS whose speaker matches `target`:
+    an exact char, an exact label, or (for multi-character targets) a
+    case-insensitive substring of the display name. Falls back to the
+    positional Speaker A/B labels, so `--speaker A` still works on archives
+    that carry no explicit names."""
+    target = (target or "").strip().lower()
+    if not target:
+        return set()
+    labels = speaker_labels(episode)
+    keep = set()
+    for ch in set(episode.get("speaker", "")):
+        label = labels.get(ch, "").lower()
+        if target == ch.lower() or target == label or (len(target) > 1 and target in label):
+            keep.add(ch)
+    return keep
+
+Hit = collections.namedtuple(
+    "Hit", "anchor episode word_index snippet timestamp speaker segment match",
+    defaults=(None, None, None))
 SearchResult = collections.namedtuple("SearchResult", "episode anchor hits hit_count")
 
 def compile_query(query, regex, ignore_case):
@@ -442,21 +684,35 @@ def compile_query(query, regex, ignore_case):
 def count_hits(pattern, text):
     return sum(1 for _ in pattern.finditer(text))
 
-def find_hits(episode, anchor, pattern, context_chars, max_per_episode):
+def find_hits(episode, anchor, pattern, context_chars, max_per_episode,
+              keep_chars=None, context_words=None):
     words = episode.get("words", "")
-    starts, times = None, None
+    starts = times = names = speaker_chars = seg_offsets = seg_titles = None
     hits = []
 
     for match in pattern.finditer(words):
         if starts is None:
             starts = word_starts(words)
-        if times is None:
             times = word_timestamps(episode.get("start", []))
+            names = episode.get("speakers") or {}
+            speaker_chars = episode.get("speaker", "")
+            seg_offsets, seg_titles = segment_lookup(episode)
 
         word_index = word_index_at_offset(starts, match.start())
+        if keep_chars is not None:
+            spoken_by = speaker_chars[word_index] if word_index < len(speaker_chars) else None
+            if spoken_by not in keep_chars:
+                continue
         timestamp = times[word_index] if word_index < len(times) else 0
-        left = max(0, match.start() - context_chars)
-        right = min(len(words), match.end() + context_chars)
+        if context_words is not None:
+            end_word = word_index_at_offset(starts, max(match.start(), match.end() - 1))
+            lo_word = max(0, word_index - context_words)
+            hi_word = min(len(starts) - 1, end_word + context_words)
+            left = starts[lo_word]
+            right = starts[hi_word + 1] - 1 if hi_word + 1 < len(starts) else len(words)
+        else:
+            left = max(0, match.start() - context_chars)
+            right = min(len(words), match.end() + context_chars)
         snippet = (
             ("..." if left > 0 else "")
             + words[left:match.start()]
@@ -466,7 +722,11 @@ def find_hits(episode, anchor, pattern, context_chars, max_per_episode):
             + words[match.end():right]
             + ("..." if right < len(words) else "")
         )
-        hits.append(Hit(anchor, episode, word_index, snippet.replace("\n", " "), timestamp))
+        hits.append(Hit(anchor, episode, word_index,
+                        snippet.replace("\n", " "), timestamp,
+                        named_speaker_at(names, speaker_chars, word_index),
+                        segment_at(seg_offsets, seg_titles, timestamp),
+                        words[match.start():match.end()]))
         if max_per_episode is not None and len(hits) >= max_per_episode:
             break
     return hits
@@ -480,6 +740,16 @@ def in_date_range(published, since, until):
 
 def tokenize(text):
     return re.findall(r"[a-z0-9]+", text.lower())
+
+def filtered_vocab(archive, since, until):
+    """vocab() restricted to a date range. The cached vocab is archive-wide,
+    so a date-scoped request is recomputed over the matching transcripts."""
+    doc_freq, totals = collections.Counter(), collections.Counter()
+    for row in archive.rows(since, until):
+        counts = collections.Counter(tokenize(row.words))
+        totals.update(counts)
+        doc_freq.update(counts.keys())
+    return {term: (doc_freq[term], totals[term]) for term in totals}
 
 def light_stem(word):
     """Crude suffix stripper, used to group word forms only when the archive
@@ -496,6 +766,30 @@ def light_stem(word):
         word = word[:-1]
     return word
 
+def phonetic_key(word):
+    """A rough phonetic signature: words that sound alike collapse to one key
+    (Cara/Kara, Stephen/Steven, Randi/Randy). --phonetic uses it to reach
+    mis-transcribed names that edit-distance --fuzzy misses. Deliberately
+    lossy -- an opt-in recall aid, not a precise pronunciation model."""
+    w = re.sub(r"[^a-z]", "", word.lower())
+    if not w:
+        return ""
+    w = re.sub(r"^gh", "g", w)
+    w = w.replace("sch", "sk").replace("ph", "f").replace("ck", "k").replace("gh", "")
+    w = w.replace("ch", "x").replace("sh", "x").replace("th", "0").replace("wh", "w")
+    w = re.sub(r"^(kn|gn|pn|wr|mn)", lambda m: m.group(0)[1], w)
+    w = re.sub(r"mb$", "m", w)
+    w = (w.replace("qu", "kw").replace("q", "k").replace("x", "ks")
+          .replace("z", "s").replace("v", "f"))
+    w = re.sub(r"c(?=[eiy])", "s", w).replace("c", "k")
+    w = w[0] + w[1:].replace("h", "")
+    if len(w) > 2 and w.endswith("e"):
+        w = w[:-1]
+    w = w.replace("y", "i")
+    w = re.sub(r"[aeiou]+", "a", w)
+    w = re.sub(r"(.)\1+", r"\1", w)
+    return w
+
 def similar_forms(term, archive):
     """Other grammatical forms of term: via the archive's lemma table when
     present (the same data the web UI's "similar words" box uses), else by
@@ -507,19 +801,86 @@ def similar_forms(term, archive):
         return {term, lemma} | set(lemma_to_forms.get(lemma, []))
     return {term} | set(archive.stem_groups().get(light_stem(term), []))
 
-def fuzzy_forms(term, archive, count=8, cutoff=0.8):
+def fuzzy_forms(term, archive, count=8, cutoff=0.8, width=2):
     candidates = [word for word in archive.vocab()
-                  if abs(len(word) - len(term)) <= 2]
+                  if abs(len(word) - len(term)) <= width]
     return {term} | set(difflib.get_close_matches(term, candidates, n=count, cutoff=cutoff))
 
-def expand_terms(terms, archive, similar, fuzzy):
+def phonetic_forms(term, archive):
+    """Archive words whose phonetic key matches term's (sound-alikes)."""
+    key = phonetic_key(term)
+    if not key:
+        return {term}
+    return {term} | set(archive.phonetic_groups().get(key, []))
+
+STOPWORDS = frozenset("""
+a an and or but the this that these those of to in on at for with from by as is are
+was were be been being it its i you he she we they them his her their our your my me
+him us do does did done have has had not no yes so if then than too very just about
+into out up down over under again more most some any all what which who whom when
+where why how there here can could would should will shall may might must one two
+three like get got go going gonna really right yeah okay know think thing things well
+kind lot say said says talk talking talked mean means guy guys stuff actually because
+also even want kinda sort thats theres im dont youre were weve gonna
+""".split())
+
+def semantic_neighbors(archive, term, k=6, min_co=3):
+    """Words that co-occur with `term` across episodes far more than chance
+    (PMI over the postings index). A stdlib stand-in for embeddings, so
+    --semantic needs no model download or network. Returns an empty set
+    without the postings cache, for words too common to be informative, or
+    when nothing clears the bar -- letting callers fall back to plain ranking."""
+    cache = archive.cache()
+    if not (cache and cache.has_postings()):
+        return set()
+    if term in archive._sem_cache:
+        return archive._sem_cache[term]
+    ids = cache._token_ids(term)
+    if not isinstance(ids, set) or not 0 < len(ids) <= 700:
+        archive._sem_cache[term] = set()
+        return set()
+    vocab = archive.vocab()
+    total = int(archive.header.get("items", 0)) or 1
+    df_t = vocab.get(term, (0, 0))[0] or 1
+    cooc = collections.Counter()
+    for row in archive.rows(ids=ids):
+        cooc.update(set(tokenize(row.words)))
+    # PMI over-rewards rare one-off co-occurrences (a guest's surname); require
+    # a neighbour to recur in a real fraction of the term's episodes and to be
+    # reasonably common itself, which leaves the topical words behind.
+    floor = max(min_co, int(0.1 * len(ids)))
+    scored = []
+    for word, together in cooc.items():
+        if together < floor or word == term or word in STOPWORDS:
+            continue
+        df_u = vocab.get(word, (0, 0))[0]
+        if df_u < 25 or df_u > 0.5 * total:
+            continue
+        scored.append((math.log(together * total / (df_t * df_u)), word))
+    scored.sort(reverse=True)
+    result = {word for _, word in scored[:k]}
+    archive._sem_cache[term] = result
+    return result
+
+def warn_semantic(archive, args):
+    if getattr(args, "semantic", False):
+        cache = archive.cache()
+        if not (cache and cache.has_postings()):
+            note("--semantic needs the sqlite postings cache; ranking lexically instead.")
+
+def expand_terms(terms, archive, similar, fuzzy, phonetic=False,
+                 fuzzy_cutoff=0.8, fuzzy_width=2, semantic=False):
     groups = []
     for term in terms:
         variants = {term}
         if similar:
             variants |= similar_forms(term, archive)
         if fuzzy:
-            variants |= fuzzy_forms(term, archive)
+            variants |= fuzzy_forms(term, archive, cutoff=fuzzy_cutoff, width=fuzzy_width)
+        if phonetic:
+            variants |= phonetic_forms(term, archive)
+        if semantic:
+            variants |= semantic_neighbors(archive, term)
         groups.append((term, sorted(variants)))
     return groups
 
@@ -540,11 +901,13 @@ def words_pattern(variant_sets, joined):
         body = alternation(set().union(*variant_sets))
     return r"(?<![A-Za-z0-9])" + body + r"(?![A-Za-z0-9])"
 
-def phrase_pattern(query, archive, similar, fuzzy, ignore_case):
+def phrase_pattern(query, archive, similar, fuzzy, ignore_case,
+                   phonetic=False, fuzzy_cutoff=0.8, fuzzy_width=2):
     terms = tokenize(query)
     if not terms:
         return None
-    groups = expand_terms(terms, archive, similar, fuzzy)
+    groups = expand_terms(terms, archive, similar, fuzzy, phonetic,
+                          fuzzy_cutoff, fuzzy_width)
     report_expansions(groups)
     flags = re.IGNORECASE if ignore_case else 0
     return re.compile(words_pattern([set(v) for _, v in groups], joined=True), flags)
@@ -552,9 +915,9 @@ def phrase_pattern(query, archive, similar, fuzzy, ignore_case):
 def build_search_patterns(args, archive):
     """Return (primary, requires): episodes must match every pattern in
     `requires`; snippets and counts come from `primary`."""
-    expanded = args.similar or args.fuzzy or args.any
+    expanded = args.similar or args.fuzzy or args.phonetic or args.any
     if args.regex and expanded:
-        sys.exit("--regex cannot be combined with --any, --similar, or --fuzzy.")
+        sys.exit("--regex cannot be combined with --any, --similar, --fuzzy, or --phonetic.")
     if args.all and args.any:
         sys.exit("Use either --all or --any, not both.")
     ignore_case = not args.case_sensitive
@@ -573,7 +936,8 @@ def build_search_patterns(args, archive):
     if not terms:
         return None, []
     flags = re.IGNORECASE if ignore_case else 0
-    groups = expand_terms(terms, archive, args.similar, args.fuzzy)
+    groups = expand_terms(terms, archive, args.similar, args.fuzzy, args.phonetic,
+                          args.fuzzy_cutoff, args.fuzzy_width)
     report_expansions(groups)
     variant_sets = [set(variants) for _, variants in groups]
     if args.any:
@@ -587,11 +951,14 @@ def build_search_patterns(args, archive):
     return primary, [primary]
 
 def search_episodes(archive, primary, requires, since, until, context_chars,
-                    max_per_episode, include_hits=True, need_hit_count=False):
+                    max_per_episode, include_hits=True, need_hit_count=False,
+                    speaker=None, context_words=None):
     """Search transcripts and return SearchResult rows sorted by date.
 
     Snippets are collected from `primary` only, which keeps AND searches
-    focused and cheap enough for exploratory agent use.
+    focused and cheap enough for exploratory agent use. When `speaker` is set,
+    only hits spoken by a matching host count, and episodes with none are
+    dropped.
     """
     if primary is None:
         return []
@@ -599,10 +966,28 @@ def search_episodes(archive, primary, requires, since, until, context_chars,
     for row in archive.rows(since, until):
         if not all(pattern.search(row.words) for pattern in requires):
             continue
+        if speaker:
+            episode = row.episode or archive.episode_at(row.anchor)
+            keep = speakers_matching(episode, speaker)
+            if not keep:
+                continue
+            qualifying = find_hits(episode, row.anchor, primary, context_chars,
+                                   None, keep_chars=keep, context_words=context_words)
+            if not qualifying:
+                continue
+            if not include_hits:
+                shown = []
+            elif max_per_episode is not None:
+                shown = qualifying[:max_per_episode]
+            else:
+                shown = qualifying
+            results.append(SearchResult(episode, row.anchor, shown, len(qualifying)))
+            continue
         hit_count = count_hits(primary, row.words) if need_hit_count else None
         if include_hits:
             episode = row.episode or archive.episode_at(row.anchor)
-            hits = find_hits(episode, row.anchor, primary, context_chars, max_per_episode)
+            hits = find_hits(episode, row.anchor, primary, context_chars,
+                             max_per_episode, context_words=context_words)
         else:
             episode = row.episode or {"published": row.published,
                                       "title": row.title, "link": row.link}
@@ -646,17 +1031,24 @@ def near_clusters(words, slot_patterns, window):
             merged.append([lo, hi])
     return merged, starts
 
-def span_snippet(words, starts, lo, hi, context_chars, highlight):
-    char_lo = starts[lo]
-    char_hi = starts[hi + 1] - 1 if hi + 1 < len(starts) else len(words)
-    left = max(0, char_lo - context_chars)
-    right = min(len(words), char_hi + context_chars)
+def span_snippet(words, starts, lo, hi, context_chars, highlight, context_words=None):
+    if context_words is not None:
+        lo_word = max(0, lo - context_words)
+        hi_word = min(len(starts) - 1, hi + context_words)
+        left = starts[lo_word]
+        right = starts[hi_word + 1] - 1 if hi_word + 1 < len(starts) else len(words)
+    else:
+        char_lo = starts[lo]
+        char_hi = starts[hi + 1] - 1 if hi + 1 < len(starts) else len(words)
+        left = max(0, char_lo - context_chars)
+        right = min(len(words), char_hi + context_chars)
     text = highlight.sub(lambda m: f">>{m.group(0)}<<", words[left:right])
     return (("..." if left > 0 else "")
             + text.replace("\n", " ")
             + ("..." if right < len(words) else ""))
 
-def rank_summaries(archive, query, title_weight, similar, fuzzy, since=None, until=None):
+def rank_summaries(archive, query, title_weight, similar, fuzzy, since=None, until=None,
+                   phonetic=False, fuzzy_cutoff=0.8, fuzzy_width=2, semantic=False):
     """Rank episodes by how well their summary and title match the query.
 
     Scores with TF-IDF: each query term's weight is its inverse document
@@ -666,8 +1058,9 @@ def rank_summaries(archive, query, title_weight, similar, fuzzy, since=None, unt
     query_terms = sorted(set(tokenize(query)))
     if not query_terms:
         return []
-    if similar or fuzzy:
-        groups = expand_terms(query_terms, archive, similar, fuzzy)
+    if similar or fuzzy or phonetic or semantic:
+        groups = expand_terms(query_terms, archive, similar, fuzzy, phonetic,
+                              fuzzy_cutoff, fuzzy_width, semantic=semantic)
         report_expansions(groups)
         query_terms = sorted(set().union(*(set(v) for _, v in groups)))
     query_terms = set(query_terms)
@@ -705,23 +1098,36 @@ def rank_summaries(archive, query, title_weight, similar, fuzzy, since=None, unt
     ranked.sort(key=lambda row: row[2], reverse=True)
     return ranked
 
-def rank_transcripts(archive, query, similar, fuzzy, since=None, until=None):
+def rank_transcripts(archive, query, similar, fuzzy, since=None, until=None,
+                     phonetic=False, fuzzy_cutoff=0.8, fuzzy_width=2, semantic=False):
     """TF-IDF rank over the spoken transcripts; each query word and its
     expansions count as one term."""
     terms = sorted(set(tokenize(query)))
     if not terms:
         return []
-    groups = expand_terms(terms, archive, similar, fuzzy)
+    groups = expand_terms(terms, archive, similar, fuzzy, phonetic,
+                          fuzzy_cutoff, fuzzy_width, semantic=semantic)
     report_expansions(groups)
     patterns = [(term, re.compile(words_pattern([set(variants)], joined=False),
                                   re.IGNORECASE))
                 for term, variants in groups]
 
+    # Prefilter to episodes that actually contain a query term. Episodes with
+    # none score zero, so skipping them is exact; the corpus size for IDF is
+    # taken from the full (date-scoped) count, not the scanned subset.
+    all_variants = set().union(*(set(variants) for _, variants in groups))
+    candidate = archive.or_candidates(all_variants)
+    if candidate is None:
+        total_docs, rows_iter, count_docs = 0, archive.rows(since, until), True
+    else:
+        total_docs = archive.count_rows(since, until)
+        rows_iter, count_docs = archive.rows(since, until, ids=candidate), False
+
     scored_rows = []
     document_freq = collections.Counter()
-    total_docs = 0
-    for row in archive.rows(since, until):
-        total_docs += 1
+    for row in rows_iter:
+        if count_docs:
+            total_docs += 1
         frequencies = {}
         for term, pattern in patterns:
             count = count_hits(pattern, row.words)
@@ -743,6 +1149,69 @@ def rank_transcripts(archive, query, similar, fuzzy, since=None, until=None):
         ranked.append((episode, row.anchor, score, sorted(frequencies)))
     ranked.sort(key=lambda row: row[2], reverse=True)
     return ranked
+
+def segment_scores(archive, terms, since=None, until=None):
+    """anchor-tuple -> how many query `terms` appear in that episode's chapter
+    titles. Empty when the archive carries no segments."""
+    scores = collections.Counter()
+    if not terms:
+        return scores
+    cache = archive.cache()
+    if cache and cache.meta.get("schema") == CACHE_SCHEMA:
+        for _, _, _, anchor, _, _, seg_title in cache.segment_rows(since, until):
+            overlap = len(terms & set(tokenize(seg_title)))
+            if overlap:
+                scores[tuple(anchor)] += overlap
+    else:
+        for anchor, episode in archive.episodes():
+            if not in_date_range(episode.get("published", ""), since, until):
+                continue
+            _, titles = segment_lookup(episode)
+            for title in titles:
+                overlap = len(terms & set(tokenize(title)))
+                if overlap:
+                    scores[tuple(anchor)] += overlap
+    return scores
+
+def rank_blended(archive, query, title_weight, similar, fuzzy, since=None, until=None,
+                 phonetic=False, fuzzy_cutoff=0.8, fuzzy_width=2, semantic=False):
+    """Blend transcript, summary, and chapter-title relevance into one score.
+    Each signal is normalized to its own maximum, then weighted 0.5 / 0.3 / 0.2
+    so distinctive transcript matches lead but a strong title/summary still
+    surfaces."""
+    summ = rank_summaries(archive, query, title_weight, similar, fuzzy, since, until,
+                          phonetic, fuzzy_cutoff, fuzzy_width, semantic)
+    trans = rank_transcripts(archive, query, similar, fuzzy, since, until,
+                             phonetic, fuzzy_cutoff, fuzzy_width, semantic)
+    seg = segment_scores(archive, set(tokenize(query)), since, until)
+
+    def normalize(ranked):
+        top = max((score for _, _, score, _ in ranked), default=0.0) or 1.0
+        return {tuple(anchor): score / top for _, anchor, score, _ in ranked}
+    tmap, smap = normalize(trans), normalize(summ)
+    seg_top = max(seg.values(), default=0) or 1
+
+    info = {}
+    for episode, anchor, _, matched in trans:
+        info[tuple(anchor)] = [episode, anchor, set(matched)]
+    for episode, anchor, _, matched in summ:
+        key = tuple(anchor)
+        if key in info:
+            info[key][2].update(matched)
+        else:
+            info[key] = [episode, anchor, set(matched)]
+    for key in seg:
+        if key not in info:
+            info[key] = [archive.episode_at(key), key, set()]
+
+    blended = []
+    for key, (episode, anchor, matched) in info.items():
+        score = (0.5 * tmap.get(key, 0.0) + 0.3 * smap.get(key, 0.0)
+                 + 0.2 * (seg.get(key, 0) / seg_top))
+        if score > 0:
+            blended.append((episode, anchor, score, sorted(matched)))
+    blended.sort(key=lambda item: item[2], reverse=True)
+    return blended
 
 def parse_anchor_selector(selector):
     selector = selector.strip()
@@ -815,6 +1284,7 @@ def cmd_list(archive, args):
 
 def cmd_search(archive, args):
     primary, requires = build_search_patterns(args, archive)
+    want_relevance = args.sort == "relevance"
     results = search_episodes(
         archive,
         primary,
@@ -824,8 +1294,13 @@ def cmd_search(archive, args):
         args.context,
         args.max_snippets,
         include_hits=not args.counts,
-        need_hit_count=args.counts or args.json,
+        need_hit_count=args.counts or args.json or want_relevance,
+        speaker=args.speaker,
+        context_words=args.context_words or None,
     )
+    if want_relevance:
+        results.sort(key=lambda result: (-result.hit_count,
+                                         result.episode.get("published", "")))
     if args.limit:
         results = results[: args.limit]
 
@@ -842,6 +1317,9 @@ def cmd_search(archive, args):
                 "snippets": [{
                     "timestamp": fmt_time(hit.timestamp),
                     "word_index": hit.word_index,
+                    "speaker": hit.speaker,
+                    "segment": hit.segment,
+                    "match": hit.match,
                     "text": hit.snippet,
                     "anchor": anchor_str(anchor, hit.word_index),
                 } for hit in hits],
@@ -850,7 +1328,11 @@ def cmd_search(archive, args):
         return
 
     if not results:
-        print("No matches.", file=sys.stderr)
+        msg = "No matches."
+        if args.speaker:
+            msg += (f" (restricted to speaker {args.speaker!r}; run `speakers` to see "
+                    "who is on record.)")
+        print(msg, file=sys.stderr)
         return
 
     hit_total, shown_total = 0, 0
@@ -865,7 +1347,10 @@ def cmd_search(archive, args):
             print(f"  hits   : {result.hit_count}")
             continue
         for hit in hits:
-            print(f"  [{fmt_time(hit.timestamp)}] {hit.snippet}")
+            who = f"{hit.speaker}: " if hit.speaker else ""
+            print(f"  [{fmt_time(hit.timestamp)}] {who}{hit.snippet}")
+            if hit.segment:
+                print(f"           segment: {hit.segment}")
             print(f"           -> {anchor_str(anchor, hit.word_index)}")
 
     if args.counts:
@@ -882,7 +1367,8 @@ def cmd_near(archive, args):
         alternatives = tokenize(raw.replace(",", " "))
         if not alternatives:
             sys.exit(f"No searchable words in group {raw!r}.")
-        groups = expand_terms(alternatives, archive, args.similar, args.fuzzy)
+        groups = expand_terms(alternatives, archive, args.similar, args.fuzzy,
+                              args.phonetic, args.fuzzy_cutoff, args.fuzzy_width)
         report_expansions(groups)
         variants = set().union(*(set(v) for _, v in groups))
         every_variant |= variants
@@ -896,17 +1382,36 @@ def cmd_near(archive, args):
         clusters, starts = near_clusters(row.words, slot_patterns, args.window)
         if not clusters:
             continue
+        if args.speaker:
+            episode = row.episode or archive.episode_at(row.anchor)
+            keep = speakers_matching(episode, args.speaker)
+            if not keep:
+                continue
+            chars = episode.get("speaker", "")
+            clusters = [(lo, hi) for lo, hi in clusters
+                        if any(chars[i] in keep for i in range(lo, min(hi + 1, len(chars))))]
+            if not clusters:
+                continue
         hits = []
         if not args.counts:
             episode = row.episode or archive.episode_at(row.anchor)
             times = word_timestamps(episode.get("start", []))
+            names = episode.get("speakers") or {}
+            speaker_chars = episode.get("speaker", "")
+            seg_offsets, seg_titles = segment_lookup(episode)
             for lo, hi in clusters[: args.max_snippets]:
                 timestamp = times[lo] if lo < len(times) else 0
-                snippet = span_snippet(row.words, starts, lo, hi, args.context, highlight)
-                hits.append(Hit(row.anchor, None, lo, snippet, timestamp))
+                snippet = span_snippet(row.words, starts, lo, hi, args.context, highlight,
+                                       context_words=args.context_words or None)
+                hits.append(Hit(row.anchor, None, lo, snippet, timestamp,
+                                named_speaker_at(names, speaker_chars, lo),
+                                segment_at(seg_offsets, seg_titles, timestamp)))
         found.append((row, len(clusters), hits))
 
-    found.sort(key=lambda item: item[0].published)
+    if args.sort == "relevance":
+        found.sort(key=lambda item: (-item[1], item[0].published))
+    else:
+        found.sort(key=lambda item: item[0].published)
     if args.limit:
         found = found[: args.limit]
 
@@ -920,6 +1425,8 @@ def cmd_near(archive, args):
             "snippets": [{
                 "timestamp": fmt_time(hit.timestamp),
                 "word_index": hit.word_index,
+                "speaker": hit.speaker,
+                "segment": hit.segment,
                 "text": hit.snippet,
                 "anchor": anchor_str(row.anchor, hit.word_index),
             } for hit in hits],
@@ -940,12 +1447,18 @@ def cmd_near(archive, args):
             print(f"  passages: {cluster_count}")
             continue
         for hit in hits:
-            print(f"  [{fmt_time(hit.timestamp)}] {hit.snippet}")
+            who = f"{hit.speaker}: " if hit.speaker else ""
+            print(f"  [{fmt_time(hit.timestamp)}] {who}{hit.snippet}")
+            if hit.segment:
+                print(f"           segment: {hit.segment}")
             print(f"           -> {anchor_str(row.anchor, hit.word_index)}")
     print(f"\n{len(found)} episode(s), {cluster_total} passage(s).", file=sys.stderr)
 
 def cmd_vocab(archive, args):
-    vocab = archive.vocab()
+    if args.since or args.until:
+        vocab = filtered_vocab(archive, args.since, args.until)
+    else:
+        vocab = archive.vocab()
     if args.pattern:
         needle = args.pattern.lower()
         terms = {term for term in vocab if needle in term}
@@ -954,6 +1467,8 @@ def cmd_vocab(archive, args):
         if args.fuzzy:
             terms |= {term for term in fuzzy_forms(needle, archive, count=25, cutoff=0.74)
                       if term in vocab}
+        if args.phonetic:
+            terms |= {term for term in phonetic_forms(needle, archive) if term in vocab}
     else:
         terms = set(vocab)
 
@@ -979,16 +1494,21 @@ def cmd_vocab(archive, args):
 
 def cmd_context(archive, args):
     anchor, episode = resolve_episode(archive, args.episode)
-    if args.similar or args.fuzzy:
+    if args.similar or args.fuzzy or args.phonetic:
         if args.regex:
-            sys.exit("--regex cannot be combined with --similar or --fuzzy.")
+            sys.exit("--regex cannot be combined with --similar, --fuzzy, or --phonetic.")
         pattern = phrase_pattern(args.query, archive, args.similar, args.fuzzy,
-                                 not args.case_sensitive)
+                                 not args.case_sensitive, args.phonetic,
+                                 args.fuzzy_cutoff, args.fuzzy_width)
         if pattern is None:
             sys.exit("No searchable words in query.")
     else:
         pattern = compile_query(args.query, args.regex, not args.case_sensitive)
-    hits = find_hits(episode, anchor, pattern, args.context, None)
+    keep = speakers_matching(episode, args.speaker) if args.speaker else None
+    if args.speaker and not keep:
+        note(f"{args.speaker!r} is not a named speaker in this episode; showing nothing.")
+    hits = find_hits(episode, anchor, pattern, args.context, None, keep_chars=keep,
+                     context_words=args.context_words or None)
     if args.json:
         print(json.dumps({
             "published": episode.get("published"),
@@ -997,6 +1517,9 @@ def cmd_context(archive, args):
             "hits": [{
                 "timestamp": fmt_time(hit.timestamp),
                 "word_index": hit.word_index,
+                "speaker": hit.speaker,
+                "segment": hit.segment,
+                "match": hit.match,
                 "text": hit.snippet,
                 "anchor": anchor_str(anchor, hit.word_index),
             } for hit in hits],
@@ -1004,7 +1527,10 @@ def cmd_context(archive, args):
         return
     print(f"{episode.get('published')}  {episode.get('title')}\n{episode.get('link')}\n")
     for hit in hits:
-        print(f"[{fmt_time(hit.timestamp)}] {hit.snippet}")
+        who = f"{hit.speaker}: " if hit.speaker else ""
+        print(f"[{fmt_time(hit.timestamp)}] {who}{hit.snippet}")
+        if hit.segment:
+            print(f"    segment: {hit.segment}")
         print(f"    -> {anchor_str(anchor, hit.word_index)}\n")
     print(f"{len(hits)} match(es).", file=sys.stderr)
 
@@ -1047,6 +1573,181 @@ def cmd_transcript(archive, args):
     if line:
         print(" ".join(line))
 
+def cmd_segments(archive, args):
+    pattern = None
+    if args.query:
+        pattern = compile_query(args.query, args.regex, not args.case_sensitive)
+
+    if args.episode:
+        anchor, episode = resolve_episode(archive, args.episode)
+        offsets, titles = segment_lookup(episode)
+        times = word_timestamps(episode.get("start", []))
+        rows = []
+        for off, title in zip(offsets, titles):
+            if pattern and not pattern.search(title):
+                continue
+            wi = bisect.bisect_left(times, off) if times else 0
+            rows.append((off, wi, title))
+        if args.json:
+            print(json.dumps({
+                "published": episode.get("published"),
+                "title": episode.get("title"),
+                "link": clean_link(episode.get("link")),
+                "segments": [{
+                    "timestamp": fmt_time(off), "offset_seconds": off,
+                    "word_index": wi, "segment": title,
+                    "anchor": anchor_str(anchor, wi),
+                } for off, wi, title in rows],
+            }, indent=2))
+            return
+        if not offsets:
+            print("This episode has no segment/chapter data.", file=sys.stderr)
+            return
+        print(f"{episode.get('published')}  {episode.get('title')}")
+        print(clean_link(episode.get("link")))
+        for off, wi, title in rows:
+            print(f"  [{fmt_time(off)}]  {title}")
+            print(f"      -> {anchor_str(anchor, wi)}")
+        print(f"\n{len(rows)} of {len(offsets)} chapter(s) shown.", file=sys.stderr)
+        return
+
+    if pattern is None:
+        sys.exit("Give a search term or --episode (listing every chapter would be huge).")
+
+    cache = archive.cache()
+    found, any_segments = [], False
+    if cache and cache.meta.get("schema") == CACHE_SCHEMA:
+        any_segments = cache.meta.get("has_segments") == "1"
+        for pub, title, link, anchor, off, wi, seg_title in cache.segment_rows(
+                args.since, args.until):
+            if pattern.search(seg_title):
+                found.append((pub, title, link, anchor, off, wi, seg_title))
+    else:
+        for anchor, episode in archive.episodes():
+            if not in_date_range(episode.get("published", ""), args.since, args.until):
+                continue
+            offsets, titles = segment_lookup(episode)
+            if offsets:
+                any_segments = True
+            times = None
+            for off, title in zip(offsets, titles):
+                if not pattern.search(title):
+                    continue
+                if times is None:
+                    times = word_timestamps(episode.get("start", []))
+                wi = bisect.bisect_left(times, off) if times else 0
+                found.append((episode.get("published", ""), episode.get("title", ""),
+                              clean_link(episode.get("link", "")), anchor, off, wi, title))
+    found.sort(key=lambda item: (item[0], item[4]))
+    if args.limit:
+        found = found[: args.limit]
+
+    if args.json:
+        print(json.dumps([{
+            "published": published, "title": title, "link": link,
+            "timestamp": fmt_time(off), "offset_seconds": off,
+            "word_index": wi, "segment": seg_title,
+            "anchor": anchor_str(anchor, wi),
+        } for published, title, link, anchor, off, wi, seg_title in found], indent=2))
+        return
+    if not any_segments:
+        print("This archive has no segment/chapter data.", file=sys.stderr)
+        return
+    for published, title, link, anchor, off, wi, seg_title in found:
+        print(f"\n{published}  [{fmt_time(off)}]  {seg_title}")
+        print(f"    {title}")
+        print(f"    -> {anchor_str(anchor, wi)}")
+    print(f"\n{len(found)} segment(s) across matching episodes.", file=sys.stderr)
+
+def cmd_speakers(archive, args):
+    if args.episode:
+        anchor, episode = resolve_episode(archive, args.episode)
+        labels = speaker_labels(episode)
+        chars = episode.get("speaker", "")
+        times = word_timestamps(episode.get("start", []))
+        explicit = set((episode.get("speakers") or {}).values())
+        counts, first = collections.Counter(), {}
+        for i, ch in enumerate(chars):
+            label = labels.get(ch, "Speaker")
+            counts[label] += 1
+            if label not in first:
+                first[label] = times[i] if i < len(times) else 0
+        ranked = sorted(counts.items(), key=lambda kv: kv[1], reverse=True)
+        if args.json:
+            print(json.dumps({
+                "published": episode.get("published"),
+                "title": episode.get("title"),
+                "link": clean_link(episode.get("link")),
+                "named": bool(episode.get("speakers")),
+                "speakers": [{"name": name, "words": n,
+                              "first": fmt_time(first[name]),
+                              "explicit": name in explicit} for name, n in ranked],
+            }, indent=2))
+            return
+        print(f"{episode.get('published')}  {episode.get('title')}")
+        print(clean_link(episode.get("link")))
+        if not episode.get("speakers"):
+            print("  (this archive has no explicit speaker names; labels are positional)")
+        print(f"\n  {'words':>7}  {'first':>8}  speaker")
+        for name, n in ranked:
+            print(f"  {n:>7}  {fmt_time(first[name]):>8}  {name}")
+        print(f"\n{len(ranked)} speaker(s).", file=sys.stderr)
+        return
+
+    cache = archive.cache()
+    if (cache and not args.since and not args.until
+            and cache.meta.get("schema") == CACHE_SCHEMA):
+        roster = cache.speaker_roster()
+        name_eps = {name: eps for name, words, eps in roster}
+        ranked = [(name, words) for name, words, eps in roster]
+        eps_total = int(cache.meta.get("episodes", 0))
+        eps_with_names = int(cache.meta.get("episodes_with_names", 0))
+        unnamed_words = int(cache.meta.get("unnamed_words", 0))
+    else:
+        name_words, name_eps = collections.Counter(), collections.Counter()
+        unnamed_words = eps_with_names = eps_total = 0
+        for anchor, episode in archive.episodes():
+            if not in_date_range(episode.get("published", ""), args.since, args.until):
+                continue
+            eps_total += 1
+            names = episode.get("speakers") or {}
+            local = collections.Counter()
+            for ch in episode.get("speaker", ""):
+                local[names.get(ch)] += 1
+            named = {name: n for name, n in local.items() if name is not None}
+            if named:
+                eps_with_names += 1
+                for name, n in named.items():
+                    name_words[name] += n
+                    name_eps[name] += 1
+            unnamed_words += local.get(None, 0)
+        ranked = sorted(name_words.items(), key=lambda kv: kv[1], reverse=True)
+    if args.limit:
+        ranked = ranked[: args.limit]
+
+    if args.json:
+        print(json.dumps({
+            "episodes": eps_total,
+            "episodes_with_named_speakers": eps_with_names,
+            "unnamed_words": unnamed_words,
+            "speakers": [{"name": name, "words": n, "episodes": name_eps[name]}
+                         for name, n in ranked],
+        }, indent=2))
+        return
+    if not ranked:
+        print(f"No named speakers in this archive ({eps_total} episode(s) scanned); "
+              "speakers are positional only (A/B/...) and do not correlate across "
+              "episodes. Use `speakers --episode TITLE` for one episode's breakdown.",
+              file=sys.stderr)
+        return
+    print(f"Named speakers across {eps_total} episode(s) ({eps_with_names} with names):\n")
+    print(f"  {'words':>10}  {'episodes':>8}  name")
+    for name, n in ranked:
+        print(f"  {n:>10}  {name_eps[name]:>8}  {name}")
+    if unnamed_words:
+        print(f"\n{unnamed_words:,} word(s) spoken by unnamed/guest speakers.",
+              file=sys.stderr)
+
 def cmd_summaries(archive, args):
     needle = (args.query or "").lower()
     rows = []
@@ -1074,12 +1775,21 @@ def cmd_summaries(archive, args):
     print(f"\n{len(rows)} episode(s).", file=sys.stderr)
 
 def cmd_rank(archive, args):
-    if args.transcripts:
+    warn_semantic(archive, args)
+    if args.blend:
+        ranked = rank_blended(archive, args.query, args.title_weight, args.similar,
+                              args.fuzzy, args.since, args.until, args.phonetic,
+                              args.fuzzy_cutoff, args.fuzzy_width, args.semantic)
+    elif args.transcripts:
         ranked = rank_transcripts(archive, args.query, args.similar, args.fuzzy,
-                                  args.since, args.until)
+                                  args.since, args.until, phonetic=args.phonetic,
+                                  fuzzy_cutoff=args.fuzzy_cutoff, fuzzy_width=args.fuzzy_width,
+                                  semantic=args.semantic)
     else:
         ranked = rank_summaries(archive, args.query, args.title_weight,
-                                args.similar, args.fuzzy, args.since, args.until)
+                                args.similar, args.fuzzy, args.since, args.until,
+                                phonetic=args.phonetic, fuzzy_cutoff=args.fuzzy_cutoff,
+                                fuzzy_width=args.fuzzy_width, semantic=args.semantic)
     if args.limit:
         ranked = ranked[: args.limit]
     if args.json:
@@ -1106,6 +1816,105 @@ def cmd_rank(archive, args):
         if args.summaries:
             print(f"         {episode.get('summary', '') or ''}")
     print(f"\n{len(ranked)} episode(s) ranked.", file=sys.stderr)
+
+def _expansion_namespace(args, any_terms=False, regex=False):
+    """Build the attribute bag build_search_patterns() expects, so high-level
+    commands can reuse the exact search-pattern logic."""
+    return argparse.Namespace(
+        query=args.query, regex=regex, all=False, any=any_terms,
+        similar=args.similar, fuzzy=args.fuzzy, phonetic=args.phonetic,
+        case_sensitive=False, fuzzy_cutoff=args.fuzzy_cutoff,
+        fuzzy_width=args.fuzzy_width)
+
+def distinctive_query(archive, query):
+    """Drop near-ubiquitous words (the, is, who...) from a query so a
+    confirming quote centers on the terms that actually carry meaning; keep
+    everything if that would leave nothing."""
+    vocab = archive.vocab()
+    total = int(archive.header.get("items", 0)) or 1
+    tokens = list(dict.fromkeys(tokenize(query)))
+    rare = [token for token in tokens if vocab.get(token, (0, 0))[0] <= 0.4 * total]
+    return " ".join(rare or tokens)
+
+def cmd_find(archive, args):
+    warn_semantic(archive, args)
+    ranked = rank_blended(archive, args.query, args.title_weight, args.similar,
+                          args.fuzzy, args.since, args.until, args.phonetic,
+                          args.fuzzy_cutoff, args.fuzzy_width, args.semantic)
+    ranked = ranked[: args.limit]
+    quote_ns = _expansion_namespace(args, any_terms=True)
+    quote_ns.query = distinctive_query(archive, args.query)
+    primary, _ = build_search_patterns(quote_ns, archive)
+
+    found = []
+    for episode, anchor, score, matched in ranked:
+        full = archive.episode_at(anchor)
+        hits = find_hits(full, anchor, primary, 200, 1) if primary else []
+        found.append((episode, anchor, score, matched, hits[0] if hits else None))
+
+    if args.json:
+        print(json.dumps([{
+            "score": round(score, 3),
+            "published": episode.get("published"),
+            "title": episode.get("title"),
+            "link": clean_link(episode.get("link")),
+            "matched_terms": matched,
+            "anchor": anchor_str(anchor),
+            "quote": None if hit is None else {
+                "timestamp": fmt_time(hit.timestamp),
+                "speaker": hit.speaker,
+                "segment": hit.segment,
+                "text": hit.snippet,
+                "anchor": anchor_str(anchor, hit.word_index),
+            },
+        } for episode, anchor, score, matched, hit in found], indent=2))
+        return
+    if not found:
+        print("No episodes matched.", file=sys.stderr)
+        return
+    for episode, anchor, score, matched, hit in found:
+        print(f"\n[{score:5.3f}] {episode.get('published')}  {episode.get('title')}")
+        print(f"        {clean_link(episode.get('link'))}")
+        print(f"        open : {anchor_str(anchor)}")
+        if matched:
+            print(f"        terms: {', '.join(matched)}")
+        if hit is not None:
+            who = f"{hit.speaker}: " if hit.speaker else ""
+            print(f"        [{fmt_time(hit.timestamp)}] {who}{hit.snippet}")
+            if hit.segment:
+                print(f"        segment: {hit.segment}")
+            print(f"        -> {anchor_str(anchor, hit.word_index)}")
+    print(f"\n{len(found)} episode(s); confirm a quote before answering.", file=sys.stderr)
+
+def cmd_trends(archive, args):
+    primary, requires = build_search_patterns(
+        _expansion_namespace(args, regex=args.regex), archive)
+    if primary is None:
+        sys.exit("No searchable terms.")
+    hits_by_year, eps_by_year = collections.Counter(), collections.Counter()
+    for row in archive.rows(args.since, args.until):
+        if not all(pattern.search(row.words) for pattern in requires):
+            continue
+        count = count_hits(primary, row.words)
+        if count:
+            year = (row.published or "")[:4] or "????"
+            hits_by_year[year] += count
+            eps_by_year[year] += 1
+    years = sorted(set(hits_by_year) | set(eps_by_year))
+    if args.json:
+        print(json.dumps([{"year": year, "episodes": eps_by_year[year],
+                           "hits": hits_by_year[year]} for year in years], indent=2))
+        return
+    if not years:
+        print("No matches.", file=sys.stderr)
+        return
+    peak = max(hits_by_year.values())
+    print(f"{'year':>6}  {'eps':>4}  {'hits':>6}")
+    for year in years:
+        bar = "#" * round(40 * hits_by_year[year] / peak) if peak else ""
+        print(f"{year:>6}  {eps_by_year[year]:>4}  {hits_by_year[year]:>6}  {bar}")
+    print(f"\n{sum(eps_by_year.values())} episode(s), {sum(hits_by_year.values())} hit(s).",
+          file=sys.stderr)
 
 def cmd_cache(archive, args):
     path = os.path.join(archive.dir, CACHE_NAME)
@@ -1254,11 +2063,17 @@ def build_parser():
     p.add_argument("--any", action="store_true", help="Match episodes containing ANY query word (whole-word OR).")
     p.add_argument("--similar", action="store_true", help="Also match other grammatical forms of each word (fly/flies/flew).")
     p.add_argument("--fuzzy", action="store_true", help="Also match close spellings from the archive (catches transcription errors).")
+    p.add_argument("--phonetic", action="store_true", help="Also match sound-alike words (mis-transcribed names: Cara/Kara).")
+    p.add_argument("--fuzzy-cutoff", type=float, default=0.8, help="Similarity 0-1 for --fuzzy (lower=looser; default 0.8).")
+    p.add_argument("--fuzzy-width", type=int, default=2, help="Max length difference --fuzzy will consider (default 2).")
     p.add_argument("--case-sensitive", action="store_true")
+    p.add_argument("--speaker", help="Only count hits spoken by this host (name substring, e.g. Cara).")
     p.add_argument("--counts", action="store_true", help="Only report per-episode hit counts, not snippets.")
     p.add_argument("--max-snippets", type=int, default=3, help="Max snippets shown per episode (default 3).")
     p.add_argument("--context", type=int, default=200, help="Characters of context on each side of a hit (default 200).")
-    p.add_argument("--limit", type=int, default=0, help="Show at most N matching episodes after date sorting.")
+    p.add_argument("--context-words", type=int, default=0, help="Use a word-based window instead: N whole words on each side.")
+    p.add_argument("--sort", choices=("date", "relevance"), default="date", help="Order episodes by date (default) or by hit count.")
+    p.add_argument("--limit", type=int, default=0, help="Show at most N matching episodes after sorting.")
     p.add_argument("--since", help="Only episodes on/after YYYY-MM-DD.")
     p.add_argument("--until", help="Only episodes on/before YYYY-MM-DD.")
     p.add_argument("--json", action="store_true")
@@ -1274,11 +2089,17 @@ def build_parser():
     p.add_argument("--window", type=int, default=50, help="Max words between the first and last matched word (default 50).")
     p.add_argument("--similar", action="store_true", help="Also match other grammatical forms of each word.")
     p.add_argument("--fuzzy", action="store_true", help="Also match close spellings from the archive.")
+    p.add_argument("--phonetic", action="store_true", help="Also match sound-alike words (mis-transcribed names: Cara/Kara).")
+    p.add_argument("--fuzzy-cutoff", type=float, default=0.8, help="Similarity 0-1 for --fuzzy (lower=looser; default 0.8).")
+    p.add_argument("--fuzzy-width", type=int, default=2, help="Max length difference --fuzzy will consider (default 2).")
     p.add_argument("--case-sensitive", action="store_true")
+    p.add_argument("--speaker", help="Only passages a matching host takes part in (name substring).")
     p.add_argument("--counts", action="store_true", help="Only report per-episode passage counts, not snippets.")
     p.add_argument("--max-snippets", type=int, default=3, help="Max passages shown per episode (default 3).")
     p.add_argument("--context", type=int, default=150, help="Characters of context around each passage (default 150).")
-    p.add_argument("--limit", type=int, default=0, help="Show at most N matching episodes after date sorting.")
+    p.add_argument("--context-words", type=int, default=0, help="Use a word-based window instead: N whole words on each side.")
+    p.add_argument("--sort", choices=("date", "relevance"), default="date", help="Order episodes by date (default) or by passage count.")
+    p.add_argument("--limit", type=int, default=0, help="Show at most N matching episodes after sorting.")
     p.add_argument("--since", help="Only episodes on/after YYYY-MM-DD.")
     p.add_argument("--until", help="Only episodes on/before YYYY-MM-DD.")
     p.add_argument("--json", action="store_true")
@@ -1288,8 +2109,11 @@ def build_parser():
     p.add_argument("pattern", nargs="?", help="Substring to look for; omit to list the most common words.")
     p.add_argument("--similar", action="store_true", help="Include other grammatical forms of the pattern.")
     p.add_argument("--fuzzy", action="store_true", help="Include close spellings of the pattern.")
+    p.add_argument("--phonetic", action="store_true", help="Include sound-alike words (mis-transcribed names: Cara/Kara).")
     p.add_argument("--limit", type=int, default=30, help="Show at most N words (default 30, 0=all).")
     p.add_argument("--min-count", type=int, default=1, help="Hide words occurring fewer than N times.")
+    p.add_argument("--since", help="Only count words in episodes on/after YYYY-MM-DD.")
+    p.add_argument("--until", help="Only count words in episodes on/before YYYY-MM-DD.")
     p.add_argument("--json", action="store_true")
     p.set_defaults(func=cmd_vocab)
 
@@ -1303,8 +2127,13 @@ def build_parser():
     p.add_argument("--regex", action="store_true")
     p.add_argument("--similar", action="store_true", help="Also match other grammatical forms of each word.")
     p.add_argument("--fuzzy", action="store_true", help="Also match close spellings from the archive.")
+    p.add_argument("--phonetic", action="store_true", help="Also match sound-alike words (mis-transcribed names: Cara/Kara).")
+    p.add_argument("--fuzzy-cutoff", type=float, default=0.8, help="Similarity 0-1 for --fuzzy (lower=looser; default 0.8).")
+    p.add_argument("--fuzzy-width", type=int, default=2, help="Max length difference --fuzzy will consider (default 2).")
     p.add_argument("--case-sensitive", action="store_true")
+    p.add_argument("--speaker", help="Only show hits spoken by this host (name substring, e.g. Cara).")
     p.add_argument("--context", type=int, default=300, help="Characters of context on each side (default 300).")
+    p.add_argument("--context-words", type=int, default=0, help="Use a word-based window instead: N whole words on each side.")
     p.add_argument("--json", action="store_true")
     p.set_defaults(func=cmd_context)
 
@@ -1317,6 +2146,25 @@ def build_parser():
     p.add_argument("--json", action="store_true")
     p.set_defaults(func=cmd_transcript)
 
+    p = sub.add_parser("segments", help="Search chapter/segment titles, or list one episode's chapters.")
+    p.add_argument("query", nargs="?", help="Substring (or --regex) to match in segment titles.")
+    p.add_argument("--episode", help="List every chapter for ONE episode (title substring or anchor).")
+    p.add_argument("--regex", action="store_true", help="Treat the query as a regular expression.")
+    p.add_argument("--case-sensitive", action="store_true")
+    p.add_argument("--since", help="Only episodes on/after YYYY-MM-DD.")
+    p.add_argument("--until", help="Only episodes on/before YYYY-MM-DD.")
+    p.add_argument("--limit", type=int, default=0, help="Show at most N segments.")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_segments)
+
+    p = sub.add_parser("speakers", help="Show the speaker roster (archive-wide) or one episode's breakdown.")
+    p.add_argument("--episode", help="Per-episode speaker breakdown (title substring or anchor).")
+    p.add_argument("--since", help="Only episodes on/after YYYY-MM-DD (archive-wide mode).")
+    p.add_argument("--until", help="Only episodes on/before YYYY-MM-DD (archive-wide mode).")
+    p.add_argument("--limit", type=int, default=0, help="Show at most N speakers.")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_speakers)
+
     p = sub.add_parser("summaries", help="List/filter episode summaries by substring.")
     p.add_argument("query", nargs="?", help="Optional substring to filter summaries/titles.")
     p.add_argument("--limit", type=int, default=0, help="Show at most N matching episodes.")
@@ -1328,8 +2176,13 @@ def build_parser():
     p = sub.add_parser("rank", help="Relevance-rank episodes against a query (TF-IDF).")
     p.add_argument("query", help="Topic words; matching is per-word, not an exact phrase.")
     p.add_argument("--transcripts", action="store_true", help="Rank by words spoken in transcripts instead of titles/summaries.")
+    p.add_argument("--blend", action="store_true", help="Blend transcript + summary + chapter-title relevance into one score.")
+    p.add_argument("--semantic", action="store_true", help="Also weigh words that co-occur with the query across episodes (needs cache).")
     p.add_argument("--similar", action="store_true", help="Also count other grammatical forms of each word.")
     p.add_argument("--fuzzy", action="store_true", help="Also count close spellings from the archive.")
+    p.add_argument("--phonetic", action="store_true", help="Also count sound-alike words (mis-transcribed names: Cara/Kara).")
+    p.add_argument("--fuzzy-cutoff", type=float, default=0.8, help="Similarity 0-1 for --fuzzy (lower=looser; default 0.8).")
+    p.add_argument("--fuzzy-width", type=int, default=2, help="Max length difference --fuzzy will consider (default 2).")
     p.add_argument("--limit", type=int, default=15, help="Show top N episodes (default 15, 0=all).")
     p.add_argument(
         "--title-weight",
@@ -1342,6 +2195,34 @@ def build_parser():
     p.add_argument("--summaries", action="store_true", help="Print each episode's summary too.")
     p.add_argument("--json", action="store_true")
     p.set_defaults(func=cmd_rank)
+
+    p = sub.add_parser("find", help="One-shot: blended rank + a confirming quote per episode.")
+    p.add_argument("query", help="A topic or question in plain words.")
+    p.add_argument("--limit", type=int, default=5, help="Episodes to return (default 5).")
+    p.add_argument("--semantic", action="store_true", help="Also weigh words that co-occur with the query across episodes (needs cache).")
+    p.add_argument("--similar", action="store_true", help="Also match other grammatical forms.")
+    p.add_argument("--fuzzy", action="store_true", help="Also match close spellings.")
+    p.add_argument("--phonetic", action="store_true", help="Also match sound-alike words.")
+    p.add_argument("--fuzzy-cutoff", type=float, default=0.8, help="Similarity 0-1 for --fuzzy (default 0.8).")
+    p.add_argument("--fuzzy-width", type=int, default=2, help="Max length difference for --fuzzy (default 2).")
+    p.add_argument("--title-weight", type=int, default=3, help="Weight of title vs summary words (default 3).")
+    p.add_argument("--since", help="Only episodes on/after YYYY-MM-DD.")
+    p.add_argument("--until", help="Only episodes on/before YYYY-MM-DD.")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_find)
+
+    p = sub.add_parser("trends", help="Per-year episode/hit counts for a term (mini timeline).")
+    p.add_argument("query", help="Word or phrase to track over time.")
+    p.add_argument("--regex", action="store_true", help="Treat the query as a regular expression.")
+    p.add_argument("--similar", action="store_true", help="Also count other grammatical forms.")
+    p.add_argument("--fuzzy", action="store_true", help="Also count close spellings.")
+    p.add_argument("--phonetic", action="store_true", help="Also count sound-alike words.")
+    p.add_argument("--fuzzy-cutoff", type=float, default=0.8, help="Similarity 0-1 for --fuzzy (default 0.8).")
+    p.add_argument("--fuzzy-width", type=int, default=2, help="Max length difference for --fuzzy (default 2).")
+    p.add_argument("--since", help="Only episodes on/after YYYY-MM-DD.")
+    p.add_argument("--until", help="Only episodes on/before YYYY-MM-DD.")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_trends)
 
     p = sub.add_parser("cache", help="Build/refresh the sqlite speed-up cache and report its status.")
     p.add_argument("--rebuild", action="store_true", help="Force a full rebuild.")
