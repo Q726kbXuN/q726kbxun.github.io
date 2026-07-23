@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Crossword Workbench</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>Crossword Workbench</h1>
+  <div class="toolbar">
+    <label>Size
+      <input id="width-input" type="number" min="3" max="25" value="15">
+      x
+      <input id="height-input" type="number" min="3" max="25" value="15">
+    </label>
+    <button id="new-grid">New Grid</button>
+    <span class="sep"></span>
+    <span class="mode-toggle">
+      <button id="mode-blocks" class="mode-btn">Blocks</button>
+      <button id="mode-letters" class="mode-btn">Letters</button>
+    </span>
+    <label><input id="symmetry" type="checkbox" checked> Symmetry</label>
+    <span class="sep"></span>
+    <button id="export-btn">Export</button>
+    <button id="import-btn">Import</button>
+    <button id="clear-btn">Clear</button>
+    <input id="import-file" type="file" accept=".json,application/json" hidden>
+  </div>
+</header>
+<main>
+  <section class="grid-pane">
+    <div id="grid" class="grid" tabindex="0"></div>
+    <div id="grid-status" class="grid-status"></div>
+  </section>
+  <section class="clues-pane">
+    <div class="clue-col">
+      <h2>Across:</h2>
+      <div id="across-list" class="clue-list"></div>
+    </div>
+    <div class="clue-col">
+      <h2>Down:</h2>
+      <div id="down-list" class="clue-list"></div>
+    </div>
+  </section>
+  <aside class="hint-pane">
+    <div class="hint-head">
+      <h2>Hints:</h2>
+      <button id="hint-btn">Hint</button>
+    </div>
+    <div id="hint-status" class="hint-status"></div>
+    <div id="hint-list" class="hint-list"></div>
+  </aside>
+</main>
+<script src="engine.js"></script>
+<script src="backend_static.js"></script>
+<script src="app.js"></script>
+<img src="https://d13wbvtlmw75ie.cloudfront.net/hit/p5cpr8u5dc05dk1.png" width="1" height="1">
+</body>
+</html>
