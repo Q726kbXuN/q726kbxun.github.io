@@ -81,6 +81,7 @@ def output_puzzle(xword, year, month, puz, data, f):
     # data[3]: An array of clues, see below
     # data[4]: (optional) True if this data is problematic (won't survive a trip to a .puz encoder)
     # data[5]: (optional) The puzzle type, either "", "acrostic", or "diagramless"
+    # data[6]: (optional) Metadata dict, see below
 
     # The clue format
     # clue[0]: String of the clue
@@ -88,13 +89,25 @@ def output_puzzle(xword, year, month, puz, data, f):
     # clue[2]: The number of this clue
     # clue[3 ... x]: A list of the x, y locations of each cell for this clue
 
-    # Simple text view of a scrossword
+    # The metadata format, every key is optional:
+    # "title": The title of the puzzle
+    # "author": The author of the puzzle
+    # "note": A note or hint shown to solvers
+    # "flags": An array of [x, y, flags] cell decorations, each flags value is a
+    #          comma separated list of "circle", "shaded", "top-bar", and/or "left-bar"
+    meta = data[6] if len(data) > 6 else {}
+
+    # Simple text view of a crossword
     block_left = "\u2590"
     block_mid = "\u2588"
     block_right = "\u258c"
 
-    # Dump out the name first
-    f.write(f"{xword}\n{year}-{month}-{puz}\n\n")
+    # Dump out the name first, along with any metadata
+    f.write(f"{xword}\n{year}-{month}-{puz}\n")
+    for key in ("title", "author", "note"):
+        if key in meta:
+            f.write(f"{key.title()}: {meta[key]}\n")
+    f.write("\n")
 
     # Run through each row of the crossword
     for y in range(data[1]):
@@ -112,6 +125,15 @@ def output_puzzle(xword, year, month, puz, data, f):
         # Dump out the row
         f.write(f"{row}\n")
 
+    # Note any decorated cells, grouped by the decoration
+    if "flags" in meta:
+        groups = {}
+        for x, y, flags in meta["flags"]:
+            groups.setdefault(flags, []).append(f"({x},{y})")
+        f.write("\n")
+        for flags, cells in groups.items():
+            f.write(f"{flags}: {' '.join(cells)}\n")
+
     # And now dump out the clues
     for dir_num, dir_desc in ((0, "Across"), (1, "Down")):
         need_header = True
@@ -128,7 +150,7 @@ def output_puzzle(xword, year, month, puz, data, f):
 
 @cmd("dump_all", 0, "= Download and dump out all puzzles")
 def dump_all_puzzles():
-    # Note that this will write out around 1.7gb of data
+    # Note that this will write out around 2gb of data
 
     # Get the meta data
     meta = get_data(0, 22, 78)
@@ -151,16 +173,16 @@ def dump_all_puzzles():
 
                     # And pull down the data and write it out
                     # Using cache here so only the first load for each num hits the internet
-                    data = get_data(*info, mode='gzip', header=header, cache=True)
+                    puz_data = get_data(*info, mode='gzip', header=header, cache=True)
 
-                    # Write out a JSON dumnp
+                    # Write out a JSON dump
                     with open(fn_json, "wt", newline="", encoding="utf-8") as f:
-                        json.dump(data, f, indent=4)
-                    
-                    with open(fn_txt, "wt", newline="", encoding="utf-8") as f:
-                        output_puzzle(xword, year, month, puz, data, f)
+                        json.dump(puz_data, f, indent=4)
 
                     # Write out a simple text version
+                    with open(fn_txt, "wt", newline="", encoding="utf-8") as f:
+                        output_puzzle(xword, year, month, puz, puz_data, f)
+
                     print(f"Wrote {fn_json} & .txt")
 
 def main():
