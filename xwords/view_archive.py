@@ -4,7 +4,7 @@
 # https://q726kbxun.github.io/xwords/xwords.html
 
 from urllib.request import urlopen, Request
-import gzip, json, os, sys
+import gzip, html, json, os, re, struct, sys
 
 # Simple wrapper for command line parsing
 _commands = []
@@ -148,6 +148,135 @@ def output_puzzle(xword, year, month, puz, data, f):
 
     f.write("\n")
 
+# Common characters outside latin-1, along with the windows-1252 control range,
+# replaced with plain text equivalents
+_clean_chars = {
+    "\u2018": "'", "\u2019": "'", "\u201a": "'", "\u201c": '"', "\u201d": '"',
+    "\u2013": "-", "\u2014": "-", "\u2022": "*", "\u2026": "...", "\u00a0": " ",
+    "\x85": "...", "\x91": "'", "\x92": "'", "\x93": '"', "\x94": '"',
+    "\x96": "-", "\x97": "-",
+}
+def to_latin1(val):
+    # .puz files store latin-1 text, so decode any HTML entities and replace
+    # anything that doesn't fit
+    val = html.unescape(val)
+    for src, dest in _clean_chars.items():
+        val = val.replace(src, dest)
+    return val.encode("latin-1", errors="replace")
+
+def puz_checksum(data, value=0):
+    # The rolling checksum used throughout the .puz format
+    for byte in data:
+        if value & 1:
+            value = (value >> 1) + 0x8000
+        else:
+            value >>= 1
+        value = (value + byte) & 0xffff
+    return value
+
+def puz_section(name, data):
+    # An extra section, like the circled cells or rebus values
+    return name + struct.pack("<HH", len(data), puz_checksum(data)) + data + b"\0"
+
+def output_puz(name, data):
+    # Turn one puzzle into a .puz file, the same way the archive webpage does,
+    # raising ValueError for puzzles the .puz format can't represent
+    width, height, cells, clues = data[0], data[1], data[2], data[3]
+    meta = data[6] if len(data) > 6 else {}
+
+    circled = set()
+    for x, y, flags in meta.get("flags", []):
+        if "circle" in flags.split(","):
+            circled.add((x, y))
+
+    # Build the solution and state grids, tracking rebus and circled cells
+    solution, state, markup, rebus_grid = b"", b"", b"", b""
+    rebus_ids = {}
+    for y in range(height):
+        for x in range(width):
+            cell = cells[y][x]
+            if cell == 0:
+                solution += b"."
+                state += b"."
+                markup += b"\0"
+                rebus_grid += b"\0"
+            else:
+                solution += to_latin1(cell[0].upper())
+                state += b"-"
+                markup += b"\x80" if (x, y) in circled else b"\0"
+                if len(cell) > 1:
+                    if cell not in rebus_ids:
+                        rebus_ids[cell] = len(rebus_ids) + 1
+                    rebus_grid += bytes([rebus_ids[cell] + 1])
+                else:
+                    rebus_grid += b"\0"
+
+    if not re.match(b"^[.:A-Za-z0-9@#$%&+?]+$", solution):
+        raise ValueError("solution contains characters .puz can't store")
+
+    # Order the clues the way .puz expects: walking the cells, for each cell
+    # any Across clue that starts there, then any Down clue
+    starts = {}
+    for clue in clues:
+        starts.setdefault((clue[3], clue[4], clue[1]), []).append(clue)
+    ordered = []
+    for y in range(height):
+        for x in range(width):
+            for direction in (0, 1):
+                for clue in starts.get((x, y, direction), []):
+                    ordered.append(to_latin1(clue[0]))
+
+    # The format derives the clue count from the grid, so bail out on puzzles
+    # where that doesn't line up
+    expected = 0
+    for y in range(height):
+        for x in range(width):
+            if cells[y][x] != 0:
+                if (x == 0 or cells[y][x - 1] == 0) and x < width - 1 and cells[y][x + 1] != 0:
+                    expected += 1
+                if (y == 0 or cells[y - 1][x] == 0) and y < height - 1 and cells[y + 1][x] != 0:
+                    expected += 1
+    if expected != len(ordered):
+        raise ValueError(f"grid expects {expected} clues, found {len(ordered)}")
+
+    title = to_latin1(meta.get("title") or name)
+    author = to_latin1(meta["author"]) if meta.get("author") else None
+    notepad = to_latin1(meta["note"]) if meta.get("note") else None
+
+    header = bytearray(52)
+    header[2:14] = b"ACROSS&DOWN\0"
+    header[24:28] = b"1.2c"
+    header[44] = width
+    header[45] = height
+    struct.pack_into("<HHH", header, 46, len(ordered), 1, 0)
+
+    # The checksums: the grid info, then one rolled over the grids and text,
+    # then the four masked "ICHEATED" pairs (for file version 1.2 the text
+    # part doesn't include the notepad)
+    text = title + b"\0" + (b"" if author is None else author + b"\0") + b"".join(ordered)
+    sums = [puz_checksum(header[44:52]), puz_checksum(solution), puz_checksum(state), puz_checksum(text)]
+    struct.pack_into("<H", header, 14, sums[0])
+    value = puz_checksum(text, puz_checksum(state, puz_checksum(solution, sums[0])))
+    struct.pack_into("<H", header, 0, value)
+    for i, mask in enumerate(b"ICHEATED"):
+        header[16 + i] = mask ^ ((sums[i] & 0xff) if i < 4 else (sums[i - 4] >> 8))
+
+    # The strings section: title, author, copyright, the clues, then notepad
+    strings = title + b"\0" + (author or b"") + b"\0" + b"\0"
+    strings += b"\0".join(ordered) + b"\0"
+    strings += (notepad or b"") + b"\0"
+
+    ret = bytes(header) + solution + state + strings
+    if len(rebus_ids) > 0:
+        ret += puz_section(b"GRBS", rebus_grid)
+        temp = b""
+        for rebus_value, rebus_id in sorted(rebus_ids.items(), key=lambda x: x[1]):
+            temp += ("%2d:" % rebus_id).encode("latin-1") + rebus_value.encode("latin-1", errors="replace") + b";"
+        ret += puz_section(b"RTBL", temp)
+    if b"\x80" in markup:
+        ret += puz_section(b"GEXT", markup)
+    return ret
+
 @cmd("dump_all", 0, "= Download and dump out all puzzles")
 def dump_all_puzzles():
     # Note that this will write out around 2gb of data
@@ -170,6 +299,7 @@ def dump_all_puzzles():
                         os.makedirs(dn)
                     fn_json = os.path.join(dn, f"{year}-{month}-{puz}.json")
                     fn_txt = os.path.join(dn, f"{year}-{month}-{puz}.txt")
+                    fn_puz = os.path.join(dn, f"{year}-{month}-{puz}.puz")
 
                     # And pull down the data and write it out
                     # Using cache here so only the first load for each num hits the internet
@@ -183,7 +313,19 @@ def dump_all_puzzles():
                     with open(fn_txt, "wt", newline="", encoding="utf-8") as f:
                         output_puzzle(xword, year, month, puz, puz_data, f)
 
-                    print(f"Wrote {fn_json} & .txt")
+                    # And a .puz version, skipping the puzzles that can't make the
+                    # trip, just like the webpage does
+                    wrote_puz = ""
+                    if not (len(puz_data) > 4 and puz_data[4]):
+                        try:
+                            temp = output_puz(f"{xword} - {year}-{month}-{puz}", puz_data)
+                            with open(fn_puz, "wb") as f:
+                                f.write(temp)
+                            wrote_puz = " & .puz"
+                        except ValueError as e:
+                            print(f"Skipping {year}-{month}-{puz}.puz: {e}")
+
+                    print(f"Wrote {fn_json} & .txt{wrote_puz}")
 
 def main():
     # Dirt simple TUI
