@@ -123,7 +123,7 @@ On first use the script builds `search_helper_cache.sqlite3` beside the data
 files: transcripts, a word-frequency table, a selective term index (postings)
 for fast candidate lookup, an archive-wide speaker roster, and precomputed
 chapter markers, so repeated runs skip the decompress-everything step. It is a
-disposable cache — rebuilt automatically whenever the `search_data_NN.dat`
+disposable cache -- rebuilt automatically whenever the `search_data_NN.dat`
 files change, safe to delete, skipped with `--no-cache`. The .dat archive files
 remain the only source of truth.
 
