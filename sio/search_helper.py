@@ -332,6 +332,69 @@ def archive_fingerprint(directory):
             parts.append(f"{name}:{stat.st_size}:{int(stat.st_mtime)}")
     return ";".join(parts)
 
+def archive_sync_id(directory):
+    """Machine-independent twin of archive_fingerprint: the header's build
+    timestamp and item count plus every data file's name and size. mtimes do
+    not survive an s3 sync round-trip, so a fingerprint match can only prove
+    freshness on the machine that built the cache; this id depends purely on
+    the archive's contents (the generator rewrites the header, with a fresh
+    `created`, whenever any data file's bytes change). None when the header
+    cannot be read or predates the `created` field."""
+    try:
+        with open(os.path.join(directory, "search_data_00.dat"), "rb") as fh:
+            header = json.loads(fh.read(Archive.HEADER_LEN).decode("utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not header.get("created"):
+        return None
+    sizes = ";".join(
+        f"{name}:{os.path.getsize(os.path.join(directory, name))}"
+        for name in sorted(os.listdir(directory))
+        if re.fullmatch(r"search_data_\d+\.dat", name))
+    return f"{header.get('created')}|{header.get('items')}|{sizes}"
+
+def strip_mtimes(fingerprint):
+    """The name:size part of each name:size:mtime fingerprint entry."""
+    return ";".join(part.rsplit(":", 1)[0]
+                    for part in fingerprint.split(";") if part)
+
+def cache_meta_matches(meta, fingerprint, sync_id):
+    """Does this cache metadata still describe the archive on disk?
+    "exact"  -- the size+mtime fingerprint matches (built on this machine,
+                archive untouched since).
+    "synced" -- mtimes differ but the sync id matches: the archive or cache
+                was round-tripped through s3 sync (which resets mtimes) and
+                the bytes are unchanged.
+    "legacy" -- the cache predates sync ids, but the data files' names+sizes
+                and the episode count still match the archive header, so only
+                the mtimes moved.
+    None     -- genuinely stale.
+    On any match but "exact", callers that can write should
+    refresh_cache_identity() so later runs take the fast path."""
+    if meta.get("fingerprint") == fingerprint:
+        return "exact"
+    if sync_id is None:
+        return None
+    if "sync_id" in meta:
+        return "synced" if meta["sync_id"] == sync_id else None
+    items, sizes = sync_id.split("|", 2)[1:]
+    if (strip_mtimes(meta.get("fingerprint", "")) == sizes
+            and meta.get("episodes") == items):
+        return "legacy"
+    return None
+
+def refresh_cache_identity(conn, fingerprint, sync_id):
+    """Re-stamp a cache verified via its sync id (or the legacy sizes check)
+    with the LOCAL mtime fingerprint, so this machine's later runs -- and
+    older helper copies that only understand mtime fingerprints -- match it
+    directly. Best-effort: an unwritable cache just re-verifies next run."""
+    with contextlib.suppress(sqlite3.Error):
+        conn.execute("INSERT OR REPLACE INTO meta VALUES ('fingerprint', ?)",
+                     (fingerprint,))
+        conn.execute("INSERT OR REPLACE INTO meta VALUES ('sync_id', ?)",
+                     (sync_id,))
+        conn.commit()
+
 class Cache:
     def __init__(self, conn, path):
         self.conn = conn
@@ -441,20 +504,24 @@ def open_cache(archive):
         return None
     path = os.path.join(archive.dir, CACHE_NAME)
     fingerprint = archive_fingerprint(archive.dir)
+    sync_id = archive_sync_id(archive.dir)
     if os.path.exists(path):
         try:
             conn = sqlite3.connect(path)
             meta = dict(conn.execute("SELECT key, value FROM meta"))
-            if (meta.get("schema") == CACHE_SCHEMA
-                    and meta.get("fingerprint") == fingerprint):
-                return Cache(conn, path)
+            if meta.get("schema") == CACHE_SCHEMA:
+                match = cache_meta_matches(meta, fingerprint, sync_id)
+                if match is not None:
+                    if match != "exact":
+                        refresh_cache_identity(conn, fingerprint, sync_id)
+                    return Cache(conn, path)
             conn.close()
             note("archive files changed; rebuilding the search cache ...")
         except sqlite3.Error:
             note("search cache unreadable; rebuilding ...")
-    return build_cache(archive, path, fingerprint)
+    return build_cache(archive, path, fingerprint, sync_id)
 
-def build_cache(archive, path, fingerprint):
+def build_cache(archive, path, fingerprint, sync_id=None):
     note(f"building search cache for {archive.header.get('items', '?')} "
          "episode(s); one-time until the archive changes ...")
     started = time.monotonic()
@@ -537,7 +604,7 @@ def build_cache(archive, path, fingerprint):
             ("has_segments", "1" if has_segments else "0"),
             ("has_speaker_names", "1" if name_words else "0"),
             ("has_postings", "1"),
-        ])
+        ] + ([("sync_id", sync_id)] if sync_id is not None else []))
         conn.commit()
         conn.close()
         os.replace(tmp, path)
