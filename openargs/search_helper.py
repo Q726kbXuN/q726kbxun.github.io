@@ -59,10 +59,11 @@ Fast paths:
   snippets to N words on each side (instead of `--context` characters).
 - `search` matches substrings; `--regex` unlocks alternation and wildcards.
 - Keyword hits lie. Confirm with `context` before quoting a result.
-- First use builds `search_helper_cache.sqlite3` next to the data files: an
+- First use builds `search_helper_cache.db` next to the data files: an
   ephemeral cache (transcripts, a word table, a term index, a speaker roster,
-  and chapter markers), rebuilt automatically when the archive changes, safe to
-  delete, skipped with `--no-cache`. The .dat files stay the source of truth.
+  and chapter markers), topped up in place when new episodes append and
+  rebuilt when the archive changes deeper than its tail, safe to delete,
+  skipped with `--no-cache`. The .dat files stay the source of truth.
 
 -- Linking back to the Web UI -------------------------------------------------
 `search.html#<file>,<start>,<len>,<itemID>` opens one transcript; appending
@@ -119,13 +120,16 @@ seek()s.
    words" feature; this script uses it for --similar expansion when present.
 
 -- Ancillary files ------------------------------------------------------------
-On first use the script builds `search_helper_cache.sqlite3` beside the data
+On first use the script builds `search_helper_cache.db` beside the data
 files: transcripts, a word-frequency table, a selective term index (postings)
-for fast candidate lookup, an archive-wide speaker roster, and precomputed
-chapter markers, so repeated runs skip the decompress-everything step. It is a
-disposable cache -- rebuilt automatically whenever the `search_data_NN.dat`
-files change, safe to delete, skipped with `--no-cache`. The .dat archive files
-remain the only source of truth.
+for fast candidate lookup, an archive-wide speaker roster, precomputed
+chapter markers, and a per-batch manifest, so repeated runs skip the
+decompress-everything step. It is a disposable cache -- topped up in place
+when new episodes append at the archive's tail (driven by the generator's
+cache_known.json.gz manifest), fully rebuilt when the archive changes deeper,
+safe to delete, skipped with `--no-cache`. The .dat archive files remain the
+only source of truth. A leftover pre-v3 `search_helper_cache.sqlite3` is
+deleted whenever the cache is built or updated.
 
 -- Usage ----------------------------------------------------------------------
 python3 search_helper.py                  (full help, including agent tips)
@@ -156,6 +160,7 @@ import collections
 import contextlib
 import difflib
 import gzip
+import hashlib
 import io
 import json
 import math
@@ -170,8 +175,11 @@ try:
 except ImportError:
     sqlite3 = None
 
-CACHE_NAME = "search_helper_cache.sqlite3"
-CACHE_SCHEMA = "2"
+CACHE_NAME = "search_helper_cache.db"
+# Pre-v3 caches: never read again; deleted once a .db is in place.
+LEGACY_CACHE_NAME = "search_helper_cache.sqlite3"
+CACHE_SCHEMA = "3"
+CACHE_KNOWN_NAME = "cache_known.json.gz"
 LEMMA_NAME = "search_data_lemma.dat"
 
 Row = collections.namedtuple("Row", "anchor published title link summary words episode")
@@ -395,6 +403,55 @@ def refresh_cache_identity(conn, fingerprint, sync_id):
                      (sync_id,))
         conn.commit()
 
+def remove_legacy_cache(directory):
+    """Delete a pre-v3 cache (the old .sqlite3 name).  Cache files are large,
+    no current tool reads the old name again, and the new cache that just got
+    built or updated sits beside it -- so reclaim the space quietly."""
+    with contextlib.suppress(OSError):
+        os.remove(os.path.join(directory, LEGACY_CACHE_NAME))
+
+def batch_manifest(directory, batch_slices):
+    """Per-batch identity for incremental cache updates: [[batch_slice, items,
+    key_hash], ...] positionally matching `batch_slices`, read from the
+    generator's cache_known.json.gz (its per-batch `key` lists each episode's
+    published/title/link/transcript-hash tuple -- the same identity the
+    generator itself uses to reuse unchanged leading batches).  None when the
+    manifest is missing or does not describe the archive on disk; the cache
+    still works then, but can only be rebuilt, never updated in place."""
+    try:
+        with gzip.open(os.path.join(directory, CACHE_KNOWN_NAME), "rb") as fh:
+            known = json.load(fh)
+    except (OSError, ValueError):
+        return None
+    if not isinstance(known, dict) or len(known) != len(batch_slices):
+        return None
+    manifest = []
+    for pos, batch_slice in enumerate(batch_slices):
+        entry = known.get(str(pos))
+        if (not isinstance(entry, dict) or not entry.get("key")
+                or not isinstance(entry.get("items"), int)
+                or list(entry.get("batch") or []) != list(batch_slice)):
+            return None
+        key_hash = hashlib.sha1(entry["key"].encode("utf-8")).hexdigest()
+        manifest.append([list(batch_slice), entry["items"], key_hash])
+    return manifest
+
+def episode_speaker_counts(episode):
+    """(named, unnamed, json_text) speaker attribution for one episode.  The
+    JSON lands in the cache so an incremental update can subtract a removed
+    episode's contribution to the aggregate speakers table without re-reading
+    its batch (whose bytes may already be gone from disk)."""
+    names = episode.get("speakers") or {}
+    local = collections.Counter()
+    for ch in episode.get("speaker", ""):
+        local[names.get(ch)] += 1
+    named = {name: n for name, n in local.items() if name is not None}
+    unnamed = local.get(None, 0)
+    if not named and not unnamed:
+        return named, unnamed, ""
+    return named, unnamed, json.dumps({"n": named, "u": unnamed},
+                                      sort_keys=True, separators=(",", ":"))
+
 class Cache:
     def __init__(self, conn, path):
         self.conn = conn
@@ -515,6 +572,10 @@ def open_cache(archive):
                     if match != "exact":
                         refresh_cache_identity(conn, fingerprint, sync_id)
                     return Cache(conn, path)
+                updated = update_cache(archive, path, conn, meta,
+                                       fingerprint, sync_id)
+                if updated is not None:
+                    return updated
             conn.close()
             note("archive files changed; rebuilding the search cache ...")
         except sqlite3.Error:
@@ -534,7 +595,8 @@ def build_cache(archive, path, fingerprint, sync_id=None):
             CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT);
             CREATE TABLE episodes (id INTEGER PRIMARY KEY, file INTEGER,
                 start INTEGER, length INTEGER, item INTEGER, published TEXT,
-                title TEXT, link TEXT, summary TEXT, words TEXT);
+                title TEXT, link TEXT, summary TEXT, words TEXT,
+                speaker_counts TEXT);
             CREATE TABLE vocab (term TEXT PRIMARY KEY, episodes INTEGER,
                 total INTEGER);
             CREATE TABLE postings (term TEXT PRIMARY KEY, eps TEXT);
@@ -542,46 +604,58 @@ def build_cache(archive, path, fingerprint, sync_id=None):
                 episodes INTEGER);
             CREATE TABLE segments (episode_id INTEGER, offset INTEGER,
                 word_index INTEGER, title TEXT);
+            CREATE TABLE batches (pos INTEGER PRIMARY KEY, file INTEGER,
+                start INTEGER, length INTEGER, items INTEGER,
+                first_id INTEGER, key_hash TEXT);
         """)
         doc_freq, totals = collections.Counter(), collections.Counter()
         postings = collections.defaultdict(list)
         name_words, name_eps = collections.Counter(), collections.Counter()
-        segment_rows = []
+        segment_rows, batch_rows = [], []
         unnamed_words = eps_with_names = episode_count = 0
         has_segments = False
-        for episode_id, (anchor, episode) in enumerate(archive.episodes(), start=1):
-            words = episode.get("words", "")
-            conn.execute(
-                "INSERT INTO episodes VALUES (?,?,?,?,?,?,?,?,?,?)",
-                (episode_id, anchor[0], anchor[1], anchor[2], anchor[3],
-                 episode.get("published", ""), episode.get("title", ""),
-                 episode.get("link", ""), episode.get("summary", "") or "", words))
-            counts = collections.Counter(tokenize(words))
-            totals.update(counts)
-            doc_freq.update(counts.keys())
-            for term in counts:
-                postings[term].append(episode_id)
-            episode_count += 1
+        manifest = batch_manifest(archive.dir, archive.batch_slices)
+        for pos, batch_slice in enumerate(archive.batch_slices):
+            first_id = episode_count + 1
+            for item, episode in enumerate(archive.batch(batch_slice)):
+                episode_count += 1
+                episode_id = episode_count
+                words = episode.get("words", "")
+                named, unnamed, speaker_json = episode_speaker_counts(episode)
+                conn.execute(
+                    "INSERT INTO episodes VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                    (episode_id, batch_slice[0], batch_slice[1], batch_slice[2],
+                     item, episode.get("published", ""),
+                     episode.get("title", ""), episode.get("link", ""),
+                     episode.get("summary", "") or "", words, speaker_json))
+                counts = collections.Counter(tokenize(words))
+                totals.update(counts)
+                doc_freq.update(counts.keys())
+                for term in counts:
+                    postings[term].append(episode_id)
 
-            names = episode.get("speakers") or {}
-            local = collections.Counter()
-            for ch in episode.get("speaker", ""):
-                local[names.get(ch)] += 1
-            named = {name: n for name, n in local.items() if name is not None}
-            if named:
-                eps_with_names += 1
-                for name, n in named.items():
-                    name_words[name] += n
-                    name_eps[name] += 1
-            unnamed_words += local.get(None, 0)
+                if named:
+                    eps_with_names += 1
+                    for name, n in named.items():
+                        name_words[name] += n
+                        name_eps[name] += 1
+                unnamed_words += unnamed
 
-            offsets, titles = segment_lookup(episode)
-            if offsets:
-                has_segments = True
-                times = word_timestamps(episode.get("start", []))
-                for off, title in zip(offsets, titles):
-                    wi = bisect.bisect_left(times, off) if times else 0
-                    segment_rows.append((episode_id, off, wi, title))
+                offsets, titles = segment_lookup(episode)
+                if offsets:
+                    has_segments = True
+                    times = word_timestamps(episode.get("start", []))
+                    for off, title in zip(offsets, titles):
+                        wi = bisect.bisect_left(times, off) if times else 0
+                        segment_rows.append((episode_id, off, wi, title))
+            items = episode_count - first_id + 1
+            if manifest is not None and manifest[pos][1] != items:
+                manifest = None
+            batch_rows.append([pos, batch_slice[0], batch_slice[1],
+                               batch_slice[2], items, first_id, ""])
+        if manifest is not None:
+            for row, (_, _, key_hash) in zip(batch_rows, manifest):
+                row[6] = key_hash
 
         conn.executemany("INSERT INTO vocab VALUES (?,?,?)",
                          ((term, doc_freq[term], totals[term]) for term in totals))
@@ -594,6 +668,7 @@ def build_cache(archive, path, fingerprint, sync_id=None):
         conn.executemany("INSERT INTO speakers VALUES (?,?,?)",
                          ((name, name_words[name], name_eps[name]) for name in name_words))
         conn.executemany("INSERT INTO segments VALUES (?,?,?,?)", segment_rows)
+        conn.executemany("INSERT INTO batches VALUES (?,?,?,?,?,?,?)", batch_rows)
         conn.executemany("INSERT INTO meta VALUES (?,?)", [
             ("schema", CACHE_SCHEMA),
             ("fingerprint", fingerprint),
@@ -614,8 +689,220 @@ def build_cache(archive, path, fingerprint, sync_id=None):
         with contextlib.suppress(OSError):
             os.remove(tmp)
         return None
+    remove_legacy_cache(os.path.dirname(path))
     note(f"cache built in {time.monotonic() - started:.1f}s -> {os.path.basename(path)}")
     return Cache(sqlite3.connect(path), path)
+
+def update_cache(archive, path, conn, meta, fingerprint, sync_id):
+    """Bring a stale cache up to date in place when the archive only changed
+    at its tail.  The generator reuses unchanged leading batches byte-for-byte
+    and re-emits everything after the first difference, so appending episodes
+    re-forms the last batch (plus any new ones) and leaves the prefix alone.
+    Matching the cache's stored per-batch manifest against the archive's
+    current one localizes the work to those tail batches: their episodes are
+    subtracted (vocab/postings decrements re-tokenize the cached transcripts;
+    speaker decrements come from the stored per-episode counts) and the new
+    tail is inserted exactly the way a full build would have.
+
+    Returns the refreshed Cache, or None to make the caller rebuild: no usable
+    manifest, a change too deep to be worth it, or ANY inconsistency -- the
+    cache is disposable, so every doubt resolves to a rebuild, never a clever
+    repair.  Postings stay exact for every term they index; a term that was
+    ever too common to index stays unindexed (searches still find it via the
+    full scan) until some future full rebuild reconsiders it."""
+    manifest = batch_manifest(archive.dir, archive.batch_slices)
+    if manifest is None:
+        return None
+    try:
+        old = list(conn.execute(
+            "SELECT pos, file, start, length, items, first_id, key_hash "
+            "FROM batches ORDER BY pos"))
+    except sqlite3.Error:
+        return None
+    total_old = 0
+    for pos, row in enumerate(old):
+        if row[0] != pos or not row[6] or row[5] != total_old + 1:
+            return None
+        total_old += row[4]
+    try:
+        if total_old != int(meta.get("episodes", -1)):
+            return None
+    except (TypeError, ValueError):
+        return None
+    prefix = 0
+    while (prefix < len(old) and prefix < len(manifest)
+           and list(old[prefix][1:4]) == manifest[prefix][0]
+           and old[prefix][4] == manifest[prefix][1]
+           and old[prefix][6] == manifest[prefix][2]):
+        prefix += 1
+    if prefix == 0:
+        return None
+    keep = old[prefix - 1][5] + old[prefix - 1][4] - 1
+    removed = total_old - keep
+    added = sum(items for _, items, _ in manifest[prefix:])
+    total_new = keep + added
+    if removed == 0 and added == 0:
+        refresh_cache_identity(conn, fingerprint, sync_id)
+        return Cache(conn, path)
+    if removed + added > total_new // 2:
+        return None
+    started = time.monotonic()
+    try:
+        dec_df, dec_tot = collections.Counter(), collections.Counter()
+        name_words, name_eps = collections.Counter(), collections.Counter()
+        eps_with_names = unnamed_words = 0
+        for words, speaker_json in conn.execute(
+                "SELECT words, speaker_counts FROM episodes WHERE id > ?",
+                (keep,)):
+            counts = collections.Counter(tokenize(words))
+            dec_tot.update(counts)
+            dec_df.update(counts.keys())
+            if speaker_json:
+                info = json.loads(speaker_json)
+                named = info.get("n") or {}
+                if named:
+                    eps_with_names -= 1
+                    for name, n in named.items():
+                        name_words[name] -= n
+                        name_eps[name] -= 1
+                unnamed_words -= info.get("u", 0)
+        conn.execute("DELETE FROM episodes WHERE id > ?", (keep,))
+        conn.execute("DELETE FROM segments WHERE episode_id > ?", (keep,))
+        conn.execute("DELETE FROM batches WHERE pos >= ?", (prefix,))
+
+        add_ids = collections.defaultdict(list)
+        add_tot = collections.Counter()
+        segment_rows = []
+        episode_id = keep
+        for pos in range(prefix, len(manifest)):
+            batch_slice, items, key_hash = manifest[pos]
+            episodes = archive.batch(batch_slice)
+            if len(episodes) != items:
+                raise ValueError(f"batch {pos}: manifest says {items} "
+                                 f"episode(s), archive holds {len(episodes)}")
+            conn.execute("INSERT INTO batches VALUES (?,?,?,?,?,?,?)",
+                         (pos, batch_slice[0], batch_slice[1], batch_slice[2],
+                          items, episode_id + 1, key_hash))
+            for item, episode in enumerate(episodes):
+                episode_id += 1
+                words = episode.get("words", "")
+                named, unnamed, speaker_json = episode_speaker_counts(episode)
+                conn.execute(
+                    "INSERT INTO episodes VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                    (episode_id, batch_slice[0], batch_slice[1], batch_slice[2],
+                     item, episode.get("published", ""),
+                     episode.get("title", ""), episode.get("link", ""),
+                     episode.get("summary", "") or "", words, speaker_json))
+                counts = collections.Counter(tokenize(words))
+                add_tot.update(counts)
+                for term in counts:
+                    add_ids[term].append(episode_id)
+                if named:
+                    eps_with_names += 1
+                    for name, n in named.items():
+                        name_words[name] += n
+                        name_eps[name] += 1
+                unnamed_words += unnamed
+                offsets, titles = segment_lookup(episode)
+                if offsets:
+                    times = word_timestamps(episode.get("start", []))
+                    for off, title in zip(offsets, titles):
+                        wi = bisect.bisect_left(times, off) if times else 0
+                        segment_rows.append((episode_id, off, wi, title))
+        if episode_id != total_new:
+            raise ValueError("episode count drifted during the update")
+        conn.executemany("INSERT INTO segments VALUES (?,?,?,?)", segment_rows)
+
+        terms = sorted(set(dec_df) | set(add_ids))
+        old_vocab, old_postings = {}, {}
+        for i in range(0, len(terms), 500):
+            chunk = terms[i:i + 500]
+            qmarks = ",".join("?" * len(chunk))
+            for term, n_eps, total in conn.execute(
+                    f"SELECT term, episodes, total FROM vocab "
+                    f"WHERE term IN ({qmarks})", chunk):
+                old_vocab[term] = (n_eps, total)
+            for term, eps in conn.execute(
+                    f"SELECT term, eps FROM postings "
+                    f"WHERE term IN ({qmarks})", chunk):
+                old_postings[term] = eps
+        threshold = max(1, total_new // 2)
+        for term in terms:
+            df_old, tot_old = old_vocab.get(term, (0, 0))
+            df_new = df_old - dec_df[term] + len(add_ids.get(term, ()))
+            tot_new = tot_old - dec_tot[term] + add_tot[term]
+            if df_new < 0 or tot_new < 0:
+                raise ValueError(f"negative frequency for {term!r}")
+            if df_new == 0:
+                conn.execute("DELETE FROM vocab WHERE term = ?", (term,))
+                conn.execute("DELETE FROM postings WHERE term = ?", (term,))
+                continue
+            conn.execute("INSERT OR REPLACE INTO vocab VALUES (?,?,?)",
+                         (term, df_new, tot_new))
+            if term in old_postings:
+                ids = json.loads(old_postings[term])
+                if dec_df[term]:
+                    ids = [i for i in ids if i <= keep]
+                ids.extend(add_ids.get(term, ()))
+                if len(ids) != df_new:
+                    raise ValueError(f"postings drifted for {term!r}")
+                if df_new > threshold:
+                    conn.execute("DELETE FROM postings WHERE term = ?", (term,))
+                else:
+                    conn.execute("UPDATE postings SET eps = ? WHERE term = ?",
+                                 (json.dumps(ids), term))
+            elif term not in old_vocab and df_new <= threshold:
+                conn.execute("INSERT INTO postings VALUES (?,?)",
+                             (term, json.dumps(add_ids[term])))
+            # else: the term predates this update and was never indexed (too
+            # common at some earlier build); a partial list would silently
+            # hide matches, so it stays unindexed until a full rebuild.
+        conn.execute("DELETE FROM postings WHERE term IN "
+                     "(SELECT term FROM vocab WHERE episodes > ?)",
+                     (threshold,))
+
+        for name in sorted(set(name_words) | set(name_eps)):
+            if not name_words[name] and not name_eps[name]:
+                continue
+            row = conn.execute("SELECT words, episodes FROM speakers "
+                               "WHERE name = ?", (name,)).fetchone()
+            words_n = (row[0] if row else 0) + name_words[name]
+            n_eps = (row[1] if row else 0) + name_eps[name]
+            if words_n < 0 or n_eps < 0 or (n_eps == 0) != (words_n == 0):
+                raise ValueError(f"speaker counts drifted for {name!r}")
+            if n_eps == 0:
+                conn.execute("DELETE FROM speakers WHERE name = ?", (name,))
+            else:
+                conn.execute("INSERT OR REPLACE INTO speakers VALUES (?,?,?)",
+                             (name, words_n, n_eps))
+
+        new_eps_with_names = (int(meta.get("episodes_with_names", 0))
+                              + eps_with_names)
+        new_unnamed = int(meta.get("unnamed_words", 0)) + unnamed_words
+        if new_eps_with_names < 0 or new_unnamed < 0:
+            raise ValueError("speaker totals drifted during the update")
+        conn.executemany("INSERT OR REPLACE INTO meta VALUES (?,?)", [
+            ("fingerprint", fingerprint),
+            ("updated", time.strftime("%Y-%m-%d %H:%M:%S")),
+            ("episodes", str(total_new)),
+            ("episodes_with_names", str(new_eps_with_names)),
+            ("unnamed_words", str(new_unnamed)),
+            ("has_segments", "1" if conn.execute(
+                "SELECT 1 FROM segments LIMIT 1").fetchone() else "0"),
+            ("has_speaker_names", "1" if conn.execute(
+                "SELECT 1 FROM speakers LIMIT 1").fetchone() else "0"),
+        ] + ([("sync_id", sync_id)] if sync_id is not None else []))
+        conn.commit()
+    except (OSError, ValueError, KeyError, TypeError, sqlite3.Error) as err:
+        with contextlib.suppress(sqlite3.Error):
+            conn.rollback()
+        note(f"could not update the search cache in place ({err}); "
+             "rebuilding it ...")
+        return None
+    remove_legacy_cache(os.path.dirname(path))
+    note(f"cache updated in {time.monotonic() - started:.1f}s "
+         f"(+{added}/-{removed} episode(s), {keep} untouched)")
+    return Cache(conn, path)
 
 def anchor_str(anchor, word_index=None):
     frag = ",".join(str(x) for x in anchor)
@@ -1986,10 +2273,14 @@ def cmd_trends(archive, args):
 def cmd_cache(archive, args):
     path = os.path.join(archive.dir, CACHE_NAME)
     if args.delete:
-        if os.path.exists(path):
-            os.remove(path)
-            print(f"Deleted {path}")
-        else:
+        deleted = 0
+        for name in (CACHE_NAME, LEGACY_CACHE_NAME):
+            target = os.path.join(archive.dir, name)
+            if os.path.exists(target):
+                os.remove(target)
+                print(f"Deleted {target}")
+                deleted += 1
+        if not deleted:
             print("No cache file to delete.")
         return
     if args.rebuild and os.path.exists(path):
