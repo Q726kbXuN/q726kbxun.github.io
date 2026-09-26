@@ -330,7 +330,10 @@ class Archive:
         return self._phon
 
 def note(message):
-    print(f"note: {message}", file=sys.stderr)
+    # Flush stdout first so notes land in order when both streams are piped
+    # (e.g. `batch ... 2>&1`): otherwise block-buffered stdout arrives late.
+    sys.stdout.flush()
+    print(f"note: {message}", file=sys.stderr, flush=True)
 
 def archive_fingerprint(directory):
     parts = []
@@ -2362,7 +2365,7 @@ def cmd_batch(archive, args):
                 entry["error"] = str(error)
             results.append(entry)
         else:
-            print(f"\n### [{number}/{len(lines)}] {line}")
+            print(f"\n### [{number}/{len(lines)}] {line}", flush=True)
             if error is None:
                 try:
                     run_batch_line(archive, parser, sub_argv)
@@ -2610,6 +2613,13 @@ def main(argv=None):
         return
 
     args = parser.parse_args(argv)
+    if not sys.stdout.isatty():
+        # Piped/captured output: flush stdout per line so it interleaves in
+        # order with stderr notes and summaries (matters for `batch ... 2>&1`).
+        try:
+            sys.stdout.reconfigure(line_buffering=True)
+        except (AttributeError, ValueError):
+            pass
     try:
         archive = Archive(args.archive)
     except FileNotFoundError as err:
