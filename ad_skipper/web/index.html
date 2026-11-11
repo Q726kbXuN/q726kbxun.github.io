@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Podcast Ad Tagger</title>
+<!-- Makes the page cross-origin isolated on hosts that can't send the headers (S3, GitHub Pages);
+     that's what lets the models use more than one thread. -->
+<script src="coi-serviceworker.js"></script>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header>
+  <h1>Podcast Ad Tagger</h1>
+  <p>Pick an episode and this page finds the ads in it, then plays it back with the transcript and the ads marked. Everything runs here in your browser; the audio never leaves your machine. The first run downloads about 900 MB of models, which your browser keeps for next time.</p>
+</header>
+
+<main>
+  <section id="pick">
+    <label class="drop" id="drop">
+      <input type="file" id="file" accept="audio/mpeg,audio/mp3,audio/*">
+      <span>Choose an MP3, or drop one here</span>
+    </label>
+    <p class="small" id="env"></p>
+    <label class="small"><input type="checkbox" id="gpu" checked> Use the GPU for speech to text when the browser has WebGPU</label>
+  </section>
+
+  <section id="work" hidden>
+    <h2 id="title"></h2>
+    <ol id="stages">
+      <li data-stage="measure">Measuring the audio</li>
+      <li data-stage="transcribe">Transcribing</li>
+      <li data-stage="embed">Reading the transcript</li>
+      <li data-stage="tag">Finding the ads</li>
+    </ol>
+    <div class="bar"><div id="bar"></div></div>
+    <p id="status" class="small"></p>
+  </section>
+
+  <section id="player" hidden>
+    <audio id="audio" controls preload="auto"></audio>
+    <div id="timeline" title="Click to jump"><div id="playhead"></div></div>
+    <div id="controls">
+      <span class="legend" id="legend"></span>
+      <span id="skips"></span>
+      <button id="save" type="button">Save results (JSON)</button>
+    </div>
+    <p id="toast" class="small" aria-live="polite"></p>
+    <div id="summary" class="small"></div>
+    <div id="transcript"></div>
+  </section>
+</main>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
