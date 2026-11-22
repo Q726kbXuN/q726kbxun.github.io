@@ -1139,7 +1139,7 @@ def phonetic_key(word):
     w = (w.replace("qu", "kw").replace("q", "k").replace("x", "ks")
           .replace("z", "s").replace("v", "f"))
     w = re.sub(r"c(?=[eiy])", "s", w).replace("c", "k")
-    w = w[0] + w[1:].replace("h", "")
+    w = w[:1] + w[1:].replace("h", "")  # (w[:1]: the replacements above can leave nothing, "ghh" -> "")
     if len(w) > 2 and w.endswith("e"):
         w = w[:-1]
     w = w.replace("y", "i")
