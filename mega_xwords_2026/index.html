@@ -1,0 +1,967 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Super Mega</title>
+<script src="xwords_puz.js"></script>
+<link rel="icon" type="image/png" sizes="16x16" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABmJLR0QA/wD/AP+gvaeTAAABd0lEQVQ4y62Tz0pbURCHv3NyormXqIm1WGyyK/oEBv8ssskjlBYhdFN9kbyGbkK76qa0S0UFUZcREd/ggAtpyc1tDiHhnummtKb3JrrwB7M5M/PxG2aO6na70ul0qFQqiAj/y1rL/v4BIPgkIVUxGo2k1WqJ1lrCMEzF+npNzk8P5eLiUn7EfXHOjYUxxqCUwnuPcy7lQKmEwTChFGiMmSUo5Mbyhkc0HCbUNrcpFosopVJ5zROklMpsfjJgmp4HMMkegPd+at5Uq1Xq9Trfv31lMBSWl5d4WO6cw1pLPp/PBlhrKS3Ms7b6hrv7iI2tLWZy/xBRFBGG4USABtBas/RyherrFWL3C/DcXN9mDcRV5zoNMPkZFl8sEgYFfvb7gOfk+CzdL57jo6Mph6Tgy+dPvCrNEblBpmWZtkYReNf8wMfdPeYK2TP7JJnsoFwus/CH+37nbcZJ5thpNsef2u229Ho9Go1G5neO45ggCDDG/D3rh3W/AeKYlnvZbYpFAAAAAElFTkSuQmCC"/>
+<style>
+    body {
+        background-color: #333;
+        color: #fff;
+        font-family: Georgia, "Times New Roman", serif;
+        margin: 8px 16px;
+        color-scheme: dark;
+    }
+
+    select, button {
+        color: #eef;
+        background-color: #114;
+        font-size: 11pt;
+        border: 1px solid #446;
+        border-radius: 5px;
+        padding: 2px 8px;
+        margin-right: 6px;
+        cursor: pointer;
+    }
+
+    button:hover {
+        background-color: #226;
+    }
+
+    .stats {
+        font-size: 70%;
+    }
+
+    #header {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 6px 18px;
+        margin-bottom: 4px;
+    }
+
+    .title {
+        font-size: 160%;
+        font-weight: bold;
+        letter-spacing: 1px;
+    }
+
+    .byline {
+        font-style: italic;
+        color: #ccc;
+    }
+
+    .note {
+        color: #ccc;
+        font-size: 90%;
+        margin-bottom: 8px;
+        max-width: 60em;
+    }
+
+    #cluebar {
+        min-height: 1.4em;
+        padding: 6px 10px;
+        margin-bottom: 8px;
+        background-color: #2a2a2a;
+        border-left: 4px solid #ff0;
+    }
+
+    .layout {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: flex-start;
+    }
+
+    #boardWrap {
+        max-width: 100%;
+        overflow: auto;
+    }
+
+    #controls {
+        margin-top: 6px;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px 10px;
+    }
+
+    #quads {
+        display: inline-grid;
+        grid-template-columns: auto auto;
+        gap: 2px;
+    }
+
+    .quad {
+        min-width: 9.5em;
+        padding: 1px 6px;
+        font-size: 75%;
+        border-radius: 3px;
+        background-color: #444;
+        color: #ccc;
+    }
+
+    .quad.ok {
+        background-color: #2e6b2e;
+        color: #fff;
+    }
+
+    .quad.bad {
+        background-color: #8b2a2a;
+        color: #fff;
+    }
+
+    #message {
+        font-size: 90%;
+        min-height: 1.3em;
+        margin-top: 4px;
+    }
+
+    #message.solved {
+        color: #9e9;
+        font-weight: bold;
+    }
+
+    .clueCol {
+        width: 290px;
+        flex: 0 0 auto;
+    }
+
+    .clueHead {
+        font-weight: bold;
+        margin-bottom: 4px;
+    }
+
+    .clues {
+        max-height: 600px;
+        overflow-y: auto;
+        position: relative;
+        scrollbar-color: #666 #2a2a2a;
+    }
+
+    .ClueCell, .ClueCellCur, .ClueCellCross {
+        cursor: pointer;
+        padding-left: 2.4em;
+        position: relative;
+        padding-top: 1px;
+        padding-bottom: 1px;
+    }
+
+    .ClueCell:hover {
+        background-color: #444;
+    }
+
+    .ClueCellCur {
+        background-color: #ff0;
+        color: #000;
+    }
+
+    .ClueCellCross {
+        background-color: #554;
+    }
+
+    .num {
+        left: 0em;
+        width: 2em;
+        text-align: right;
+        font-weight: bold;
+        position: absolute;
+    }
+
+    .noclue {
+        color: #999;
+    }
+
+    .ClueCellCur .noclue {
+        color: #555;
+    }
+
+    .Cell {
+        fill: #fff;
+    }
+
+    .CellWord {
+        fill: #ffff99;
+    }
+
+    .CellCur {
+        fill: #ffcc00;
+    }
+
+    .qmark {
+        fill: none;
+    }
+
+    .qmark.bad {
+        fill: rgba(220, 0, 0, 0.16);
+    }
+
+    .qmark.ok {
+        fill: rgba(0, 170, 0, 0.14);
+    }
+
+    .Board {
+        display: block;
+        font-family: arial, sans-serif;
+        user-select: none;
+        cursor: pointer;
+    }
+
+    #kb {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 1px;
+        height: 1px;
+        opacity: 0;
+        border: 0;
+        padding: 0;
+        font-size: 16px;
+    }
+</style>
+<script>
+const PUZZLE = {"title":"Super Mega","author":"Rafael Musa","date":"2026-11-22","note":"Contest: the first letters of 11 related answers, read top to bottom, spell an apt phrase.","width":50,"height":50,"entries":[{"num":1,"dir":"A","row":0,"col":0,"len":11,"clue":"\"Nice work, but there's more to do\""},{"num":12,"dir":"A","row":0,"col":12,"len":4,"clue":"___ Punk (musical duo)"},{"num":16,"dir":"A","row":0,"col":17,"len":6,"clue":"Plans that one will"},{"num":22,"dir":"A","row":0,"col":24,"len":4,"clue":"Chart, to Magellan"},{"num":26,"dir":"A","row":0,"col":29,"len":4,"clue":"When doubled, a Hawaiian fish"},{"num":30,"dir":"A","row":0,"col":35,"len":4,"clue":"Lawyer ___ Clooney"},{"num":34,"dir":"A","row":0,"col":40,"len":10,"clue":"Movement associated with a blue, pink and white flag"},{"num":44,"dir":"A","row":1,"col":0,"len":11,"clue":"Principle exemplified by \"veni, vidi, vici\" and \"reduce, reuse, recycle\""},{"num":45,"dir":"A","row":1,"col":12,"len":4,"clue":"Shrek, e.g."},{"num":46,"dir":"A","row":1,"col":17,"len":6,"clue":"___ Island (N.Y.C. borough)"},{"num":47,"dir":"A","row":1,"col":24,"len":10,"clue":"Marmalade ingredient"},{"num":50,"dir":"A","row":1,"col":35,"len":4,"clue":"Rob of \"The West Wing\""},{"num":51,"dir":"A","row":1,"col":40,"len":10,"clue":"Track team events"},{"num":52,"dir":"A","row":2,"col":0,"len":11,"clue":"16:9 is a common one for televisions"},{"num":53,"dir":"A","row":2,"col":12,"len":11,"clue":"Shows happiness"},{"num":55,"dir":"A","row":2,"col":24,"len":15,"clue":"Making preparations"},{"num":57,"dir":"A","row":2,"col":40,"len":10,"clue":"Elite N.F.L. squad"},{"num":58,"dir":"A","row":3,"col":0,"len":3,"clue":"Vietnam's national dish"},{"num":59,"dir":"A","row":3,"col":4,"len":6,"clue":"Give access to classified information"},{"num":60,"dir":"A","row":3,"col":11,"len":11,"clue":""},{"num":61,"dir":"A","row":3,"col":23,"len":16,"clue":"Cafe brewing devices"},{"num":62,"dir":"A","row":3,"col":40,"len":6,"clue":"Be deeply affected by something"},{"num":63,"dir":"A","row":3,"col":47,"len":3,"clue":"Nickname that omits \"An-\""},{"num":64,"dir":"A","row":4,"col":3,"len":4,"clue":"Differ"},{"num":65,"dir":"A","row":4,"col":8,"len":5,"clue":"Model Bruni"},{"num":67,"dir":"A","row":4,"col":14,"len":10,"clue":"Leafy dish with croutons and Parmesan, familiarly"},{"num":69,"dir":"A","row":4,"col":25,"len":5,"clue":"Helpers"},{"num":70,"dir":"A","row":4,"col":31,"len":7,"clue":"Singer Morse on the Hollywood Walk of Fame"},{"num":71,"dir":"A","row":4,"col":39,"len":8,"clue":"Units of work"},{"num":73,"dir":"A","row":5,"col":0,"len":5,"clue":"Certain erogenous zone"},{"num":76,"dir":"A","row":5,"col":6,"len":8,"clue":"Nerds Gummy ___ (roundish candy)"},{"num":79,"dir":"A","row":5,"col":15,"len":4,"clue":"Artemis II org."},{"num":80,"dir":"A","row":5,"col":21,"len":4,"clue":"Sidling crustacean"},{"num":82,"dir":"A","row":5,"col":26,"len":5,"clue":"Devoted sects"},{"num":84,"dir":"A","row":5,"col":32,"len":4,"clue":"Not real"},{"num":85,"dir":"A","row":5,"col":38,"len":4,"clue":"Ingredient in beer"},{"num":86,"dir":"A","row":5,"col":43,"len":7,"clue":"Veggie with a crunchy pod"},{"num":90,"dir":"A","row":6,"col":0,"len":9,"clue":"Suffragist who fought for the Equal Rights Amendment"},{"num":92,"dir":"A","row":6,"col":10,"len":5,"clue":"Jump for joy"},{"num":94,"dir":"A","row":6,"col":17,"len":3,"clue":"B'way buy"},{"num":96,"dir":"A","row":6,"col":21,"len":5,"clue":"The planets since 2006, e.g."},{"num":98,"dir":"A","row":6,"col":27,"len":5,"clue":"Post-snowfall vehicles"},{"num":100,"dir":"A","row":6,"col":33,"len":10,"clue":"Dishwashing aids"},{"num":104,"dir":"A","row":6,"col":44,"len":6,"clue":"Wealthy heirs, often"},{"num":105,"dir":"A","row":7,"col":0,"len":10,"clue":"Platter of raw appetizers"},{"num":107,"dir":"A","row":7,"col":12,"len":5,"clue":"Org. that tracks Santa"},{"num":110,"dir":"A","row":7,"col":18,"len":9,"clue":"AirPods, e.g."},{"num":113,"dir":"A","row":7,"col":28,"len":5,"clue":"Actress Alexander who played Pam on \"The Cosby Show\""},{"num":115,"dir":"A","row":7,"col":34,"len":10,"clue":"Dipping sauces in Creole cuisine"},{"num":117,"dir":"A","row":7,"col":45,"len":5,"clue":"Quick haircuts"},{"num":118,"dir":"A","row":8,"col":0,"len":4,"clue":"___-fulfilling prophecy"},{"num":119,"dir":"A","row":8,"col":5,"len":7,"clue":"\"Here's something that might help\""},{"num":122,"dir":"A","row":8,"col":13,"len":4,"clue":"Currency in Cancún"},{"num":123,"dir":"A","row":8,"col":18,"len":4,"clue":"Take as a bride"},{"num":124,"dir":"A","row":8,"col":24,"len":4,"clue":"Actor Kinnear"},{"num":126,"dir":"A","row":8,"col":29,"len":5,"clue":"Atrocities"},{"num":128,"dir":"A","row":8,"col":35,"len":6,"clue":"Rabble-___ (agitator)"},{"num":129,"dir":"A","row":8,"col":42,"len":3,"clue":"Gen ___"},{"num":131,"dir":"A","row":8,"col":46,"len":4,"clue":"\"Ah, makes sense\""},{"num":132,"dir":"A","row":9,"col":1,"len":4,"clue":"Haiku or elegy"},{"num":134,"dir":"A","row":9,"col":7,"len":6,"clue":"\"I've watched that already\""},{"num":136,"dir":"A","row":9,"col":14,"len":7,"clue":"Beach footwear"},{"num":138,"dir":"A","row":9,"col":22,"len":7,"clue":"German luxury cars, colloquially"},{"num":141,"dir":"A","row":9,"col":30,"len":5,"clue":"Mexican street corn dish"},{"num":143,"dir":"A","row":9,"col":36,"len":4,"clue":"___ Goose vodka"},{"num":144,"dir":"A","row":9,"col":41,"len":9,"clue":"Assessment of computer connectivity"},{"num":146,"dir":"A","row":10,"col":0,"len":7,"clue":"Dishonorable path"},{"num":149,"dir":"A","row":10,"col":8,"len":6,"clue":"Like Mecca, in Islam"},{"num":151,"dir":"A","row":10,"col":15,"len":5,"clue":"Beach buckets"},{"num":152,"dir":"A","row":10,"col":21,"len":18,"clue":"Stayed up until sunrise working on a paper, say"},{"num":155,"dir":"A","row":10,"col":40,"len":9,"clue":"Do something?"},{"num":156,"dir":"A","row":11,"col":0,"len":8,"clue":"HDMI hookups, e.g."},{"num":158,"dir":"A","row":11,"col":9,"len":6,"clue":"Argued strongly (against)"},{"num":160,"dir":"A","row":11,"col":16,"len":3,"clue":"\"Shame, shame!\""},{"num":161,"dir":"A","row":11,"col":20,"len":4,"clue":"Bundle of hay"},{"num":162,"dir":"A","row":11,"col":25,"len":5,"clue":"Party in a Faustian bargain"},{"num":163,"dir":"A","row":11,"col":32,"len":6,"clue":"Long rant"},{"num":164,"dir":"A","row":11,"col":39,"len":4,"clue":"Egg layers"},{"num":165,"dir":"A","row":11,"col":44,"len":3,"clue":"Echar ___ mano (help out, in Spanish)"},{"num":166,"dir":"A","row":12,"col":0,"len":9,"clue":"Beef bourguignon and lamb tagine"},{"num":168,"dir":"A","row":12,"col":10,"len":8,"clue":"___ acid (H2SO4)"},{"num":170,"dir":"A","row":12,"col":19,"len":6,"clue":"Word after blue or dog"},{"num":172,"dir":"A","row":12,"col":26,"len":4,"clue":"Govt. branch"},{"num":173,"dir":"A","row":12,"col":31,"len":6,"clue":"Fireplace accessories"},{"num":174,"dir":"A","row":12,"col":38,"len":12,"clue":""},{"num":179,"dir":"A","row":13,"col":0,"len":4,"clue":"Parliament seat?"},{"num":180,"dir":"A","row":13,"col":5,"len":5,"clue":"Rapper featured on Flo Rida's \"Low\""},{"num":182,"dir":"A","row":13,"col":11,"len":6,"clue":"Male part of a flower"},{"num":183,"dir":"A","row":13,"col":18,"len":8,"clue":"Disgraceful"},{"num":185,"dir":"A","row":13,"col":27,"len":5,"clue":"CNN medical analyst Wen"},{"num":187,"dir":"A","row":13,"col":33,"len":7,"clue":"Left in, on a manuscript"},{"num":189,"dir":"A","row":13,"col":41,"len":4,"clue":"Massage deeply"},{"num":190,"dir":"A","row":13,"col":46,"len":4,"clue":"Late-night host Jay"},{"num":191,"dir":"A","row":14,"col":0,"len":3,"clue":"Reno-to-Los Angeles dir."},{"num":192,"dir":"A","row":14,"col":4,"len":7,"clue":"Grinding tools"},{"num":194,"dir":"A","row":14,"col":12,"len":9,"clue":""},{"num":196,"dir":"A","row":14,"col":22,"len":5,"clue":"\"Don't Know Why\" singer Jones"},{"num":198,"dir":"A","row":14,"col":28,"len":5,"clue":"Had a beverage"},{"num":200,"dir":"A","row":14,"col":34,"len":5,"clue":"Power tool brand"},{"num":201,"dir":"A","row":14,"col":40,"len":4,"clue":"Neuter, as a horse"},{"num":202,"dir":"A","row":14,"col":45,"len":5,"clue":"Famed Memphis street"},{"num":203,"dir":"A","row":15,"col":3,"len":4,"clue":"Send nudes, say"},{"num":204,"dir":"A","row":15,"col":8,"len":7,"clue":"Musses"},{"num":206,"dir":"A","row":15,"col":16,"len":5,"clue":"Not sharp"},{"num":207,"dir":"A","row":15,"col":22,"len":5,"clue":"Complain"},{"num":208,"dir":"A","row":15,"col":28,"len":6,"clue":"Comments to the audience"},{"num":210,"dir":"A","row":15,"col":35,"len":4,"clue":"Student learning civil procedure, for short"},{"num":211,"dir":"A","row":15,"col":40,"len":9,"clue":"Old West outlaw"},{"num":213,"dir":"A","row":16,"col":1,"len":7,"clue":"Related to Earth's outer surface"},{"num":216,"dir":"A","row":16,"col":9,"len":5,"clue":"Saw with one's \"little eye\""},{"num":217,"dir":"A","row":16,"col":15,"len":7,"clue":"Noticed, colloquially"},{"num":219,"dir":"A","row":16,"col":23,"len":6,"clue":"Affirm to be true"},{"num":221,"dir":"A","row":16,"col":30,"len":5,"clue":""},{"num":223,"dir":"A","row":16,"col":36,"len":6,"clue":"Current Swedish king Carl XVI ___"},{"num":225,"dir":"A","row":16,"col":43,"len":7,"clue":"Buff"},{"num":227,"dir":"A","row":17,"col":0,"len":5,"clue":"\"___ we all?\""},{"num":228,"dir":"A","row":17,"col":6,"len":7,"clue":"Chart-___ (huge hits)"},{"num":230,"dir":"A","row":17,"col":14,"len":5,"clue":"Freeload"},{"num":231,"dir":"A","row":17,"col":20,"len":3,"clue":"Carnival city, familiarly"},{"num":233,"dir":"A","row":17,"col":24,"len":4,"clue":"Jedi trainer who lived to be 900"},{"num":234,"dir":"A","row":17,"col":29,"len":7,"clue":"Common requirement for making a return"},{"num":236,"dir":"A","row":17,"col":37,"len":4,"clue":"Read, as a QR code"},{"num":237,"dir":"A","row":17,"col":42,"len":8,"clue":"\"Crisis averted!\""},{"num":238,"dir":"A","row":18,"col":0,"len":4,"clue":"God, in Portuguese"},{"num":239,"dir":"A","row":18,"col":5,"len":7,"clue":"Bleeps out"},{"num":240,"dir":"A","row":18,"col":13,"len":5,"clue":"Totally unacceptable"},{"num":241,"dir":"A","row":18,"col":19,"len":5,"clue":"\"Hundo P!\""},{"num":243,"dir":"A","row":18,"col":25,"len":12,"clue":"Close connections"},{"num":246,"dir":"A","row":18,"col":38,"len":6,"clue":"Features of airplanes and grocery stores"},{"num":248,"dir":"A","row":18,"col":45,"len":5,"clue":"Horses' gaits"},{"num":249,"dir":"A","row":19,"col":0,"len":6,"clue":"Aquafina competitor"},{"num":251,"dir":"A","row":19,"col":7,"len":4,"clue":"Clothing"},{"num":252,"dir":"A","row":19,"col":12,"len":5,"clue":"Having the vibe of, in a modern suffix"},{"num":253,"dir":"A","row":19,"col":18,"len":7,"clue":""},{"num":255,"dir":"A","row":19,"col":26,"len":7,"clue":"Royal crowns"},{"num":256,"dir":"A","row":19,"col":34,"len":9,"clue":"Ones moving at a turtle's pace"},{"num":258,"dir":"A","row":19,"col":44,"len":6,"clue":"Green sauces"},{"num":259,"dir":"A","row":20,"col":0,"len":7,"clue":"Like the Duomo and Colosseum"},{"num":261,"dir":"A","row":20,"col":9,"len":7,"clue":"Salts containing oxygen and a halogen"},{"num":263,"dir":"A","row":20,"col":17,"len":9,"clue":"Big clearance sales"},{"num":265,"dir":"A","row":20,"col":27,"len":5,"clue":"Cheese with holes"},{"num":266,"dir":"A","row":20,"col":33,"len":6,"clue":"Actress Hawn"},{"num":267,"dir":"A","row":20,"col":41,"len":5,"clue":"\"Star Wars\" villain"},{"num":269,"dir":"A","row":21,"col":0,"len":8,"clue":""},{"num":271,"dir":"A","row":21,"col":9,"len":6,"clue":"Comedian Ego"},{"num":272,"dir":"A","row":21,"col":16,"len":4,"clue":"Got bigger"},{"num":273,"dir":"A","row":21,"col":21,"len":6,"clue":"Dar es ___, Tanzania"},{"num":275,"dir":"A","row":21,"col":28,"len":3,"clue":"IV inserters"},{"num":276,"dir":"A","row":21,"col":32,"len":6,"clue":"Least polite"},{"num":277,"dir":"A","row":21,"col":39,"len":6,"clue":"Structural concern for a cabin owner"},{"num":279,"dir":"A","row":21,"col":46,"len":4,"clue":"\"Rad!\""},{"num":283,"dir":"A","row":22,"col":2,"len":3,"clue":"5G predecessor"},{"num":284,"dir":"A","row":22,"col":6,"len":3,"clue":"They lead to two baseball outs, for short"},{"num":286,"dir":"A","row":22,"col":10,"len":3,"clue":"French plural article"},{"num":287,"dir":"A","row":22,"col":15,"len":6,"clue":"Lineup on a kitchen rack"},{"num":289,"dir":"A","row":22,"col":22,"len":8,"clue":"Take-home pay"},{"num":291,"dir":"A","row":22,"col":31,"len":5,"clue":"Middle-distance runner"},{"num":292,"dir":"A","row":22,"col":38,"len":3,"clue":"Premier ___ (wine classification)"},{"num":293,"dir":"A","row":22,"col":43,"len":7,"clue":"Targeted with criticism, colloquially"},{"num":295,"dir":"A","row":23,"col":0,"len":5,"clue":"Pattern on a tire"},{"num":297,"dir":"A","row":23,"col":6,"len":5,"clue":"Tiny amounts"},{"num":299,"dir":"A","row":23,"col":13,"len":9,"clue":"Support for hangers"},{"num":302,"dir":"A","row":23,"col":24,"len":5,"clue":"\"Tilted Arc\" sculptor Richard"},{"num":303,"dir":"A","row":23,"col":30,"len":4,"clue":"Reading light"},{"num":304,"dir":"A","row":23,"col":36,"len":7,"clue":"Designates as a successor"},{"num":308,"dir":"A","row":23,"col":44,"len":6,"clue":"Help by falsely confirming an alibi, say"},{"num":309,"dir":"A","row":24,"col":0,"len":5,"clue":"Opposite of east, in Spanish"},{"num":310,"dir":"A","row":24,"col":6,"len":10,"clue":"Enacted legislation, collectively"},{"num":313,"dir":"A","row":24,"col":17,"len":7,"clue":"Another name for Edy's"},{"num":316,"dir":"A","row":24,"col":25,"len":7,"clue":"Like some believers in God"},{"num":318,"dir":"A","row":24,"col":33,"len":11,"clue":"Noise created by a Foley artist"},{"num":322,"dir":"A","row":24,"col":45,"len":5,"clue":"Vice president Agnew"},{"num":323,"dir":"A","row":25,"col":0,"len":5,"clue":"Up to"},{"num":324,"dir":"A","row":25,"col":6,"len":11,"clue":"Be totally unintelligible"},{"num":326,"dir":"A","row":25,"col":18,"len":7,"clue":"\"Apparently ...\""},{"num":328,"dir":"A","row":25,"col":26,"len":7,"clue":"Imitated a pig"},{"num":330,"dir":"A","row":25,"col":34,"len":10,"clue":"Spurs' home"},{"num":331,"dir":"A","row":25,"col":45,"len":5,"clue":"Academy Award"},{"num":332,"dir":"A","row":26,"col":0,"len":6,"clue":"Decks with Major and Minor Arcana"},{"num":334,"dir":"A","row":26,"col":7,"len":7,"clue":"Body of water bordered by Earth's lowest dry land"},{"num":335,"dir":"A","row":26,"col":16,"len":4,"clue":"People lacking individuality, per a modern coinage from video games"},{"num":337,"dir":"A","row":26,"col":21,"len":5,"clue":"Exams for H.S. jrs."},{"num":339,"dir":"A","row":26,"col":28,"len":9,"clue":"Cultivates"},{"num":341,"dir":"A","row":26,"col":39,"len":5,"clue":"Bone doc"},{"num":342,"dir":"A","row":26,"col":45,"len":5,"clue":"Starbucks competitor"},{"num":343,"dir":"A","row":27,"col":0,"len":7,"clue":"Flow (from)"},{"num":345,"dir":"A","row":27,"col":9,"len":3,"clue":"Carrier headquartered in Sweden"},{"num":346,"dir":"A","row":27,"col":14,"len":5,"clue":"Windows 95 precursor"},{"num":348,"dir":"A","row":27,"col":20,"len":8,"clue":"Garments that maximize tanning surface area"},{"num":351,"dir":"A","row":27,"col":29,"len":6,"clue":"Greek muse of astronomy"},{"num":352,"dir":"A","row":27,"col":37,"len":3,"clue":"\"The vibes are ___\""},{"num":354,"dir":"A","row":27,"col":41,"len":3,"clue":"Hero that doesn't save the world?"},{"num":355,"dir":"A","row":27,"col":45,"len":3,"clue":"\"So relaxing!\""},{"num":356,"dir":"A","row":28,"col":0,"len":4,"clue":"Forms morning moisture"},{"num":357,"dir":"A","row":28,"col":5,"len":6,"clue":"One of the Olsen twins"},{"num":360,"dir":"A","row":28,"col":12,"len":6,"clue":""},{"num":362,"dir":"A","row":28,"col":19,"len":3,"clue":"Catchy tune"},{"num":363,"dir":"A","row":28,"col":23,"len":6,"clue":"Unwrap with gusto"},{"num":365,"dir":"A","row":28,"col":30,"len":4,"clue":"'60s Pontiacs"},{"num":366,"dir":"A","row":28,"col":35,"len":6,"clue":"\"The Life of a Showgirl\" singer, familiarly"},{"num":369,"dir":"A","row":28,"col":42,"len":8,"clue":"Low-pitched brass instrument"},{"num":373,"dir":"A","row":29,"col":4,"len":5,"clue":"Tiny hairs"},{"num":374,"dir":"A","row":29,"col":11,"len":6,"clue":"Preceding period"},{"num":375,"dir":"A","row":29,"col":18,"len":5,"clue":"Capital of Yemen"},{"num":377,"dir":"A","row":29,"col":24,"len":9,"clue":"Farm storage facilities"},{"num":379,"dir":"A","row":29,"col":34,"len":7,"clue":"Painter's board"},{"num":380,"dir":"A","row":29,"col":43,"len":7,"clue":"Pampers"},{"num":381,"dir":"A","row":30,"col":0,"len":6,"clue":"Electrician on a film set"},{"num":385,"dir":"A","row":30,"col":7,"len":9,"clue":"Bodybuilding competition since 1939"},{"num":388,"dir":"A","row":30,"col":17,"len":7,"clue":"\"Say So\" singer"},{"num":390,"dir":"A","row":30,"col":25,"len":7,"clue":"Main dishes"},{"num":391,"dir":"A","row":30,"col":33,"len":5,"clue":"18-wheelers"},{"num":392,"dir":"A","row":30,"col":39,"len":4,"clue":"Overnight ___"},{"num":395,"dir":"A","row":30,"col":44,"len":6,"clue":"Chigger, by another name"},{"num":396,"dir":"A","row":31,"col":0,"len":5,"clue":"___ LeRoy Locke, Harlem Renaissance intellectual"},{"num":397,"dir":"A","row":31,"col":6,"len":6,"clue":"Boards, as a bus"},{"num":398,"dir":"A","row":31,"col":13,"len":12,"clue":"Aesthetic associated with gothic university campuses"},{"num":401,"dir":"A","row":31,"col":26,"len":5,"clue":"Opposite of blesses"},{"num":402,"dir":"A","row":31,"col":32,"len":5,"clue":"Oregon's capital"},{"num":403,"dir":"A","row":31,"col":38,"len":7,"clue":"Classic Windows graphics editor, familiarly"},{"num":405,"dir":"A","row":31,"col":46,"len":4,"clue":"Jamie of \"M*A*S*H\""},{"num":406,"dir":"A","row":32,"col":0,"len":8,"clue":"Group of competitive drivers"},{"num":408,"dir":"A","row":32,"col":9,"len":4,"clue":"Polar bear's prey"},{"num":410,"dir":"A","row":32,"col":14,"len":7,"clue":"Inkwell dippers"},{"num":411,"dir":"A","row":32,"col":22,"len":4,"clue":"Building block of life"},{"num":413,"dir":"A","row":32,"col":27,"len":3,"clue":"Plopped (down)"},{"num":414,"dir":"A","row":32,"col":31,"len":5,"clue":"Boston N.B.A. team, familiarly"},{"num":415,"dir":"A","row":32,"col":37,"len":7,"clue":"Sicily's largest city"},{"num":416,"dir":"A","row":32,"col":45,"len":5,"clue":"Eggs ___ (brunch dish, colloquially)"},{"num":417,"dir":"A","row":33,"col":0,"len":7,"clue":"Six-line stanzas"},{"num":418,"dir":"A","row":33,"col":8,"len":6,"clue":"Discussed in detail, with \"out\""},{"num":420,"dir":"A","row":33,"col":15,"len":5,"clue":"L.A.'s region, for short"},{"num":421,"dir":"A","row":33,"col":21,"len":6,"clue":"Dirtied"},{"num":423,"dir":"A","row":33,"col":28,"len":7,"clue":"West Coast school for creative types, familiarly"},{"num":425,"dir":"A","row":33,"col":36,"len":5,"clue":"Recurring Tyler Perry character"},{"num":426,"dir":"A","row":33,"col":42,"len":7,"clue":"Offer to a loyal airline customer"},{"num":428,"dir":"A","row":34,"col":1,"len":9,"clue":"Zigs or zags"},{"num":430,"dir":"A","row":34,"col":11,"len":4,"clue":"Shape of a badminton racket head"},{"num":432,"dir":"A","row":34,"col":16,"len":6,"clue":"Bring up the rear"},{"num":434,"dir":"A","row":34,"col":23,"len":5,"clue":"David of \"The Pink Panther\""},{"num":436,"dir":"A","row":34,"col":29,"len":5,"clue":"Song snippet"},{"num":437,"dir":"A","row":34,"col":35,"len":7,"clue":"World septet"},{"num":439,"dir":"A","row":34,"col":43,"len":4,"clue":"Emulate a lion"},{"num":440,"dir":"A","row":35,"col":0,"len":5,"clue":"Dwarf planet between Mars and Jupiter"},{"num":441,"dir":"A","row":35,"col":6,"len":4,"clue":"French cosmetics brand"},{"num":442,"dir":"A","row":35,"col":11,"len":5,"clue":"Metal fastener"},{"num":444,"dir":"A","row":35,"col":17,"len":5,"clue":"___ ball"},{"num":445,"dir":"A","row":35,"col":23,"len":5,"clue":"Ominous summons"},{"num":446,"dir":"A","row":35,"col":29,"len":9,"clue":""},{"num":448,"dir":"A","row":35,"col":39,"len":7,"clue":"Demoted, jocularly"},{"num":450,"dir":"A","row":35,"col":47,"len":3,"clue":"Taxi"},{"num":453,"dir":"A","row":36,"col":0,"len":4,"clue":"News anchor Burnett"},{"num":454,"dir":"A","row":36,"col":5,"len":4,"clue":"Nintendo consoles with sensor bars"},{"num":455,"dir":"A","row":36,"col":10,"len":7,"clue":"When viewed"},{"num":457,"dir":"A","row":36,"col":18,"len":5,"clue":"Trio on Tennessee's flag"},{"num":459,"dir":"A","row":36,"col":24,"len":8,"clue":"Rightmost part of a freeway"},{"num":461,"dir":"A","row":36,"col":33,"len":6,"clue":"Bindi, e.g."},{"num":463,"dir":"A","row":36,"col":40,"len":5,"clue":"Neat freaks' opposites"},{"num":464,"dir":"A","row":36,"col":46,"len":4,"clue":"Lie relaxedly"},{"num":465,"dir":"A","row":37,"col":0,"len":12,"clue":""},{"num":468,"dir":"A","row":37,"col":13,"len":6,"clue":"Like Egypt, among the world's countries"},{"num":470,"dir":"A","row":37,"col":20,"len":4,"clue":"Short Instagram video"},{"num":472,"dir":"A","row":37,"col":25,"len":6,"clue":"Cast party attendees"},{"num":473,"dir":"A","row":37,"col":32,"len":8,"clue":"Snakes, but not ladders"},{"num":475,"dir":"A","row":37,"col":41,"len":9,"clue":"Home to Western Michigan University"},{"num":477,"dir":"A","row":38,"col":3,"len":3,"clue":"Long time period"},{"num":478,"dir":"A","row":38,"col":7,"len":4,"clue":"\"Should be in your inbox shortly!\""},{"num":479,"dir":"A","row":38,"col":12,"len":6,"clue":"One of two \"Men in Black\" protagonists"},{"num":480,"dir":"A","row":38,"col":20,"len":5,"clue":"\"We feel the same!\""},{"num":482,"dir":"A","row":38,"col":26,"len":4,"clue":"Columns' counterparts"},{"num":483,"dir":"A","row":38,"col":31,"len":3,"clue":"___ Talk"},{"num":484,"dir":"A","row":38,"col":35,"len":6,"clue":"Tush"},{"num":486,"dir":"A","row":38,"col":42,"len":8,"clue":"Removing from power"},{"num":487,"dir":"A","row":39,"col":1,"len":9,"clue":"Zigzagging downhill"},{"num":490,"dir":"A","row":39,"col":11,"len":18,"clue":"Some artists in the Appalachian tradition"},{"num":494,"dir":"A","row":39,"col":30,"len":5,"clue":"Come apart at the ___"},{"num":496,"dir":"A","row":39,"col":36,"len":6,"clue":"Not hot"},{"num":498,"dir":"A","row":39,"col":43,"len":7,"clue":"Protégés"},{"num":499,"dir":"A","row":40,"col":0,"len":9,"clue":"\"That's craziness!\""},{"num":500,"dir":"A","row":40,"col":10,"len":4,"clue":"On the house"},{"num":501,"dir":"A","row":40,"col":15,"len":5,"clue":"Composer Erik"},{"num":502,"dir":"A","row":40,"col":21,"len":7,"clue":"Thomas Edison has 1,093 to his name"},{"num":503,"dir":"A","row":40,"col":29,"len":7,"clue":""},{"num":505,"dir":"A","row":40,"col":37,"len":6,"clue":"Transitioned smoothly"},{"num":507,"dir":"A","row":40,"col":45,"len":4,"clue":"Opera set in Egypt"},{"num":508,"dir":"A","row":41,"col":0,"len":4,"clue":"British noble"},{"num":509,"dir":"A","row":41,"col":5,"len":3,"clue":"Vuori competitor"},{"num":510,"dir":"A","row":41,"col":9,"len":6,"clue":"Good-looking"},{"num":512,"dir":"A","row":41,"col":16,"len":5,"clue":"After-dinner coffee order"},{"num":514,"dir":"A","row":41,"col":22,"len":4,"clue":"William with a bow"},{"num":515,"dir":"A","row":41,"col":28,"len":4,"clue":"\"Then again,\" in a text"},{"num":516,"dir":"A","row":41,"col":33,"len":4,"clue":"Park and Madison, in N.Y.C."},{"num":518,"dir":"A","row":41,"col":38,"len":7,"clue":"Aggressive poker play"},{"num":521,"dir":"A","row":41,"col":46,"len":4,"clue":"Science fiction award"},{"num":523,"dir":"A","row":42,"col":0,"len":5,"clue":"Request from"},{"num":525,"dir":"A","row":42,"col":6,"len":10,"clue":"Reduces friction in"},{"num":528,"dir":"A","row":42,"col":17,"len":5,"clue":"Send, as payment"},{"num":530,"dir":"A","row":42,"col":23,"len":9,"clue":"Unrefined"},{"num":533,"dir":"A","row":42,"col":33,"len":5,"clue":"Fifty past"},{"num":535,"dir":"A","row":42,"col":40,"len":10,"clue":"Baker's 8x8-inch container"},{"num":537,"dir":"A","row":43,"col":0,"len":6,"clue":"Incredible bargains"},{"num":539,"dir":"A","row":43,"col":7,"len":10,"clue":"Solution to a calculus problem?"},{"num":541,"dir":"A","row":43,"col":18,"len":5,"clue":"Frenzied"},{"num":543,"dir":"A","row":43,"col":24,"len":5,"clue":"Letter-shaped groove"},{"num":544,"dir":"A","row":43,"col":30,"len":3,"clue":"\"That hurt!\""},{"num":546,"dir":"A","row":43,"col":35,"len":5,"clue":"Rapper Shakur"},{"num":549,"dir":"A","row":43,"col":41,"len":9,"clue":""},{"num":550,"dir":"A","row":44,"col":0,"len":7,"clue":"Injury that may require arthroscopic knee surgery, for short"},{"num":552,"dir":"A","row":44,"col":8,"len":4,"clue":"Texter's \"Oh, what the heck?\""},{"num":553,"dir":"A","row":44,"col":14,"len":4,"clue":"Blue-green color"},{"num":555,"dir":"A","row":44,"col":19,"len":5,"clue":"French fathers"},{"num":557,"dir":"A","row":44,"col":25,"len":4,"clue":"László ___, lead character of 2024's \"The Brutalist\""},{"num":558,"dir":"A","row":44,"col":31,"len":4,"clue":"\"Roll Tide!\" school, informally"},{"num":561,"dir":"A","row":44,"col":36,"len":8,"clue":"Duvet covers, fitted sheets, etc."},{"num":563,"dir":"A","row":44,"col":45,"len":5,"clue":"Lying facedown"},{"num":564,"dir":"A","row":45,"col":3,"len":8,"clue":"Emphasizes"},{"num":566,"dir":"A","row":45,"col":12,"len":7,"clue":"Inundated"},{"num":569,"dir":"A","row":45,"col":20,"len":5,"clue":"Neighbor of Togo"},{"num":571,"dir":"A","row":45,"col":26,"len":10,"clue":"Medical sales figures, in brief"},{"num":575,"dir":"A","row":45,"col":37,"len":5,"clue":"On and on"},{"num":576,"dir":"A","row":45,"col":43,"len":4,"clue":"Pleased"},{"num":578,"dir":"A","row":46,"col":0,"len":3,"clue":"Letters after a list"},{"num":581,"dir":"A","row":46,"col":4,"len":6,"clue":"Sheep meat"},{"num":582,"dir":"A","row":46,"col":11,"len":16,"clue":"Tuscan delicacies"},{"num":585,"dir":"A","row":46,"col":28,"len":11,"clue":"Treats enjoyed with a cuppa"},{"num":587,"dir":"A","row":46,"col":40,"len":6,"clue":"Golden ___ (awards show)"},{"num":589,"dir":"A","row":46,"col":47,"len":3,"clue":"Egyptian ___ (cat breed)"},{"num":592,"dir":"A","row":47,"col":0,"len":10,"clue":"Excessive hand-washer, perhaps"},{"num":594,"dir":"A","row":47,"col":11,"len":15,"clue":"Procrastinator's refrain"},{"num":595,"dir":"A","row":47,"col":27,"len":11,"clue":"\"Helping out isn't worth the risk\""},{"num":596,"dir":"A","row":47,"col":39,"len":11,"clue":"Can openers?"},{"num":598,"dir":"A","row":48,"col":0,"len":10,"clue":"Quintet that holds about 20% of the earth's surface fresh water"},{"num":599,"dir":"A","row":48,"col":11,"len":4,"clue":"___ center"},{"num":600,"dir":"A","row":48,"col":16,"len":10,"clue":"Term from the Latin for \"solid ground\""},{"num":601,"dir":"A","row":48,"col":27,"len":6,"clue":"Epitomes of slowness"},{"num":602,"dir":"A","row":48,"col":34,"len":4,"clue":"Actress Falco"},{"num":603,"dir":"A","row":48,"col":39,"len":11,"clue":"\"We have to get serious now!\""},{"num":604,"dir":"A","row":49,"col":0,"len":10,"clue":"Silent-era short films"},{"num":605,"dir":"A","row":49,"col":11,"len":4,"clue":"\"Goodness me!\""},{"num":606,"dir":"A","row":49,"col":17,"len":4,"clue":"Doping substance, informally"},{"num":607,"dir":"A","row":49,"col":22,"len":4,"clue":"Abel's brother"},{"num":608,"dir":"A","row":49,"col":27,"len":6,"clue":"Early computer connection protocol"},{"num":609,"dir":"A","row":49,"col":34,"len":4,"clue":"Word after hot or fine"},{"num":610,"dir":"A","row":49,"col":39,"len":11,"clue":"Household clearance events"},{"num":1,"dir":"D","row":0,"col":0,"len":4,"clue":"Ensnare"},{"num":2,"dir":"D","row":0,"col":1,"len":4,"clue":"\"Quiet!\""},{"num":3,"dir":"D","row":0,"col":2,"len":4,"clue":"Dog food brand"},{"num":4,"dir":"D","row":0,"col":3,"len":3,"clue":"Golfer's accessory"},{"num":5,"dir":"D","row":0,"col":4,"len":8,"clue":"Philosopher accused of corrupting Athenian youth"},{"num":6,"dir":"D","row":0,"col":5,"len":5,"clue":"Chasing"},{"num":7,"dir":"D","row":0,"col":6,"len":9,"clue":"Targets of neuter-and-return programs"},{"num":8,"dir":"D","row":0,"col":7,"len":4,"clue":"Jazz trumpeter Jones"},{"num":9,"dir":"D","row":0,"col":8,"len":11,"clue":"Expresses clearly"},{"num":10,"dir":"D","row":0,"col":9,"len":6,"clue":"Queens, in Quito"},{"num":11,"dir":"D","row":0,"col":10,"len":3,"clue":"\"Chucky\" actor Briones"},{"num":12,"dir":"D","row":0,"col":12,"len":8,"clue":"Slightly behind, in baseball"},{"num":13,"dir":"D","row":0,"col":13,"len":4,"clue":"Forever"},{"num":14,"dir":"D","row":0,"col":14,"len":5,"clue":"Extract oil from shale, say"},{"num":15,"dir":"D","row":0,"col":15,"len":6,"clue":"Earthling, in sci-fi"},{"num":16,"dir":"D","row":0,"col":17,"len":7,"clue":"For data-gathering purposes"},{"num":17,"dir":"D","row":0,"col":18,"len":12,"clue":"\"Easy-peasy!\""},{"num":18,"dir":"D","row":0,"col":19,"len":5,"clue":"Venomous African snake"},{"num":19,"dir":"D","row":0,"col":20,"len":5,"clue":"Subway entrance"},{"num":20,"dir":"D","row":0,"col":21,"len":9,"clue":"One might be observed at an observatory"},{"num":21,"dir":"D","row":0,"col":22,"len":3,"clue":"Number of time zones in Japan"},{"num":22,"dir":"D","row":0,"col":24,"len":4,"clue":"Trunk growth"},{"num":23,"dir":"D","row":0,"col":25,"len":5,"clue":"South American corn-based flatbread"},{"num":24,"dir":"D","row":0,"col":26,"len":6,"clue":"Jason ___, \"The Lost Boys\" co-star"},{"num":25,"dir":"D","row":0,"col":27,"len":7,"clue":"Paid to play"},{"num":26,"dir":"D","row":0,"col":29,"len":9,"clue":"Shop with a suit tailor, perhaps"},{"num":27,"dir":"D","row":0,"col":30,"len":4,"clue":"Jason's ship, in Greek mythology"},{"num":28,"dir":"D","row":0,"col":31,"len":5,"clue":"\"Fire away\""},{"num":29,"dir":"D","row":0,"col":32,"len":6,"clue":"How a shared dessert might be split"},{"num":30,"dir":"D","row":0,"col":35,"len":9,"clue":"Way to tell whether you're high?"},{"num":31,"dir":"D","row":0,"col":36,"len":5,"clue":"Princess from the island of Motunui"},{"num":32,"dir":"D","row":0,"col":37,"len":5,"clue":"\"Darn it!\""},{"num":33,"dir":"D","row":0,"col":38,"len":4,"clue":"Some jeans"},{"num":34,"dir":"D","row":0,"col":40,"len":9,"clue":"___ Square, London landmark"},{"num":35,"dir":"D","row":0,"col":41,"len":8,"clue":"Eased up"},{"num":36,"dir":"D","row":0,"col":42,"len":5,"clue":"\"That's right up my ___!\""},{"num":37,"dir":"D","row":0,"col":43,"len":6,"clue":"City in southern Italy or southern Florida"},{"num":38,"dir":"D","row":0,"col":44,"len":7,"clue":"Residents of Damascus"},{"num":39,"dir":"D","row":0,"col":45,"len":8,"clue":"Draw out for a long time"},{"num":40,"dir":"D","row":0,"col":46,"len":3,"clue":"Subway scurrier"},{"num":41,"dir":"D","row":0,"col":47,"len":4,"clue":"On the rocks"},{"num":42,"dir":"D","row":0,"col":48,"len":4,"clue":"Esteemed"},{"num":43,"dir":"D","row":0,"col":49,"len":4,"clue":"Salinger heroine"},{"num":48,"dir":"D","row":1,"col":28,"len":7,"clue":"Princess in Disney's \"Enchanted\""},{"num":49,"dir":"D","row":1,"col":33,"len":6,"clue":"Remove the nails from, as a cat"},{"num":54,"dir":"D","row":2,"col":16,"len":4,"clue":"Toni Morrison's second novel"},{"num":56,"dir":"D","row":2,"col":34,"len":6,"clue":"Salt dispenser"},{"num":60,"dir":"D","row":3,"col":11,"len":4,"clue":"Holly genus"},{"num":61,"dir":"D","row":3,"col":23,"len":5,"clue":"Muse of lyric poetry"},{"num":64,"dir":"D","row":4,"col":3,"len":10,"clue":"Fancy word for \"shout\""},{"num":66,"dir":"D","row":4,"col":10,"len":3,"clue":"Waze suggestion: Abbr."},{"num":68,"dir":"D","row":4,"col":22,"len":4,"clue":"Gateway ___ (St. Louis monument)"},{"num":71,"dir":"D","row":4,"col":39,"len":6,"clue":"Effa ___, only woman in the National Baseball Hall of Fame"},{"num":72,"dir":"D","row":4,"col":46,"len":16,"clue":"Rabbis, imams and priests"},{"num":73,"dir":"D","row":5,"col":0,"len":4,"clue":"Long-nosed fish"},{"num":74,"dir":"D","row":5,"col":1,"len":10,"clue":"Pajama parties"},{"num":75,"dir":"D","row":5,"col":2,"len":10,"clue":"It can be a sham"},{"num":77,"dir":"D","row":5,"col":7,"len":5,"clue":"Fishing supplies"},{"num":78,"dir":"D","row":5,"col":13,"len":4,"clue":"Low-quality A.I. content"},{"num":81,"dir":"D","row":5,"col":24,"len":6,"clue":"___ tiger"},{"num":83,"dir":"D","row":5,"col":30,"len":6,"clue":"Rotate, as an office chair"},{"num":85,"dir":"D","row":5,"col":38,"len":6,"clue":"Chief ___ to the Cabinet Office (official title for the resident cat at 10 Downing Street)"},{"num":87,"dir":"D","row":5,"col":47,"len":6,"clue":"Balances carefully"},{"num":88,"dir":"D","row":5,"col":48,"len":6,"clue":"Catch in a net"},{"num":89,"dir":"D","row":5,"col":49,"len":5,"clue":"Positive quality"},{"num":91,"dir":"D","row":6,"col":5,"len":3,"clue":"Dien Bien ___, Vietnam"},{"num":93,"dir":"D","row":6,"col":14,"len":4,"clue":"Word in Spanish 101 and French 101"},{"num":95,"dir":"D","row":6,"col":19,"len":5,"clue":"Counterpart of heads"},{"num":97,"dir":"D","row":6,"col":25,"len":6,"clue":"Called"},{"num":99,"dir":"D","row":6,"col":31,"len":5,"clue":"Ability"},{"num":101,"dir":"D","row":6,"col":36,"len":11,"clue":"Common environmental requirement for cars"},{"num":102,"dir":"D","row":6,"col":37,"len":6,"clue":"Rained hard"},{"num":103,"dir":"D","row":6,"col":42,"len":10,"clue":"\"Anarchy in the U.K.\" band"},{"num":106,"dir":"D","row":7,"col":9,"len":5,"clue":"\"Understand?,\" informally"},{"num":108,"dir":"D","row":7,"col":15,"len":4,"clue":"\"Stat!\""},{"num":109,"dir":"D","row":7,"col":16,"len":13,"clue":"Making a deposit at the bank?"},{"num":111,"dir":"D","row":7,"col":20,"len":3,"clue":"Motor homes, e.g., for short"},{"num":112,"dir":"D","row":7,"col":26,"len":6,"clue":"Like some loaves and sports teams"},{"num":114,"dir":"D","row":7,"col":32,"len":6,"clue":"Baseball slugger Pete"},{"num":116,"dir":"D","row":7,"col":43,"len":4,"clue":"Oracle"},{"num":120,"dir":"D","row":8,"col":10,"len":5,"clue":"Ancient Machu Picchu residents"},{"num":121,"dir":"D","row":8,"col":11,"len":6,"clue":"Brightest star in the night sky"},{"num":125,"dir":"D","row":8,"col":27,"len":6,"clue":"Driveway surface"},{"num":127,"dir":"D","row":8,"col":33,"len":6,"clue":"Arms for snowmen"},{"num":130,"dir":"D","row":8,"col":44,"len":6,"clue":"Sharply reject"},{"num":133,"dir":"D","row":9,"col":4,"len":4,"clue":"Unruly masses of people"},{"num":135,"dir":"D","row":9,"col":12,"len":9,"clue":"Spin yarns"},{"num":137,"dir":"D","row":9,"col":17,"len":4,"clue":"___ golf"},{"num":138,"dir":"D","row":9,"col":22,"len":7,"clue":"In heat, as female cattle"},{"num":139,"dir":"D","row":9,"col":23,"len":8,"clue":"Billie Holiday's real first name"},{"num":140,"dir":"D","row":9,"col":28,"len":8,"clue":"Criticized pettily"},{"num":142,"dir":"D","row":9,"col":34,"len":6,"clue":"White wading birds"},{"num":144,"dir":"D","row":9,"col":41,"len":8,"clue":"Lagoon barrier, at times"},{"num":145,"dir":"D","row":9,"col":45,"len":4,"clue":"First James Bond movie"},{"num":146,"dir":"D","row":10,"col":0,"len":5,"clue":"Tibetan monks"},{"num":147,"dir":"D","row":10,"col":5,"len":7,"clue":"Description of an online image"},{"num":148,"dir":"D","row":10,"col":6,"len":9,"clue":"Alleged cabal of unelected government officials"},{"num":150,"dir":"D","row":10,"col":13,"len":7,"clue":"Slandered"},{"num":152,"dir":"D","row":10,"col":21,"len":4,"clue":"Tropical tree"},{"num":153,"dir":"D","row":10,"col":29,"len":6,"clue":"Church fixtures"},{"num":154,"dir":"D","row":10,"col":35,"len":6,"clue":"Regarding this matter, in a formal document"},{"num":155,"dir":"D","row":10,"col":40,"len":3,"clue":"That girl"},{"num":157,"dir":"D","row":11,"col":7,"len":4,"clue":"Buzzer beater?"},{"num":159,"dir":"D","row":11,"col":14,"len":5,"clue":"Simplifies, with \"down\""},{"num":161,"dir":"D","row":11,"col":20,"len":10,"clue":"Noisily energetic"},{"num":164,"dir":"D","row":11,"col":39,"len":3,"clue":"\"___ I known ...\""},{"num":167,"dir":"D","row":12,"col":8,"len":4,"clue":"River deposit"},{"num":169,"dir":"D","row":12,"col":15,"len":3,"clue":"Outdoor apparel retailer"},{"num":170,"dir":"D","row":12,"col":19,"len":5,"clue":"Southern hip-hop subgenre"},{"num":171,"dir":"D","row":12,"col":24,"len":6,"clue":"Uncommon occurrence"},{"num":173,"dir":"D","row":12,"col":31,"len":9,"clue":"Means of watching bamboo-eating bears"},{"num":174,"dir":"D","row":12,"col":38,"len":9,"clue":"Ravaged environment"},{"num":175,"dir":"D","row":12,"col":43,"len":7,"clue":"Buddies from long ago"},{"num":176,"dir":"D","row":12,"col":47,"len":8,"clue":"Fast driver, metaphorically"},{"num":177,"dir":"D","row":12,"col":48,"len":8,"clue":"Being borrowed by"},{"num":178,"dir":"D","row":12,"col":49,"len":3,"clue":"Sorrow"},{"num":181,"dir":"D","row":13,"col":9,"len":9,"clue":"Antibiotic ointment"},{"num":183,"dir":"D","row":13,"col":18,"len":5,"clue":"Makeshift guest bed"},{"num":184,"dir":"D","row":13,"col":25,"len":6,"clue":"Telecommuter's accessory"},{"num":186,"dir":"D","row":13,"col":30,"len":9,"clue":"Lack of worldly experience"},{"num":188,"dir":"D","row":13,"col":37,"len":5,"clue":"MA and PA are in it"},{"num":192,"dir":"D","row":14,"col":4,"len":4,"clue":"Nuisance"},{"num":193,"dir":"D","row":14,"col":10,"len":15,"clue":"Occasion that's second only to Thanksgiving in nationwide food consumption"},{"num":195,"dir":"D","row":14,"col":17,"len":5,"clue":"Bike securer"},{"num":197,"dir":"D","row":14,"col":26,"len":6,"clue":"Obeyed"},{"num":199,"dir":"D","row":14,"col":32,"len":6,"clue":"Pelvic floor exercises"},{"num":201,"dir":"D","row":14,"col":40,"len":6,"clue":"Historic port city of Poland"},{"num":202,"dir":"D","row":14,"col":45,"len":7,"clue":"Former N.F.L. quarterback Bubby"},{"num":203,"dir":"D","row":15,"col":3,"len":14,"clue":"Sequences of morning yoga positions"},{"num":205,"dir":"D","row":15,"col":11,"len":4,"clue":"Gentlemen"},{"num":209,"dir":"D","row":15,"col":33,"len":4,"clue":"Bridge bid specification"},{"num":212,"dir":"D","row":15,"col":44,"len":3,"clue":"Annual e-sports event, for short"},{"num":213,"dir":"D","row":16,"col":1,"len":6,"clue":"Invent"},{"num":214,"dir":"D","row":16,"col":2,"len":13,"clue":"Environmentally friendly drinking utensil"},{"num":215,"dir":"D","row":16,"col":7,"len":4,"clue":"Word that can fill the blanks of \"So ___!\" and \"Go ___!\""},{"num":217,"dir":"D","row":16,"col":15,"len":5,"clue":"Pigeon shelters"},{"num":218,"dir":"D","row":16,"col":21,"len":6,"clue":"Insults"},{"num":220,"dir":"D","row":16,"col":27,"len":5,"clue":"Indian wedding garments"},{"num":222,"dir":"D","row":16,"col":34,"len":7,"clue":"Podcast installment"},{"num":224,"dir":"D","row":16,"col":39,"len":4,"clue":"\"Dynamite\" singer Cruz"},{"num":226,"dir":"D","row":16,"col":49,"len":4,"clue":"Loch ___ monster"},{"num":227,"dir":"D","row":17,"col":0,"len":5,"clue":"Contribute"},{"num":229,"dir":"D","row":17,"col":8,"len":3,"clue":"Free TV ad, for short"},{"num":230,"dir":"D","row":17,"col":14,"len":5,"clue":"Wi-Fi device"},{"num":232,"dir":"D","row":17,"col":22,"len":6,"clue":"Buckeye"},{"num":234,"dir":"D","row":17,"col":29,"len":6,"clue":"Sculptures such as \"The Thinker\" and \"The Kiss\""},{"num":235,"dir":"D","row":17,"col":35,"len":6,"clue":"Bank employee"},{"num":237,"dir":"D","row":17,"col":42,"len":5,"clue":"French film award"},{"num":239,"dir":"D","row":18,"col":5,"len":4,"clue":"\"Ta-ta!\""},{"num":240,"dir":"D","row":18,"col":13,"len":4,"clue":"Formal denial"},{"num":241,"dir":"D","row":18,"col":19,"len":9,"clue":"Broccoli sections"},{"num":242,"dir":"D","row":18,"col":23,"len":5,"clue":"Small egg"},{"num":244,"dir":"D","row":18,"col":28,"len":9,"clue":"Came to one's senses"},{"num":245,"dir":"D","row":18,"col":36,"len":4,"clue":"Covers with grass"},{"num":247,"dir":"D","row":18,"col":41,"len":4,"clue":"Impose, as a tax"},{"num":250,"dir":"D","row":19,"col":4,"len":9,"clue":"Region between Cairo and the Mediterranean"},{"num":252,"dir":"D","row":19,"col":12,"len":4,"clue":"Scoundrels"},{"num":253,"dir":"D","row":19,"col":18,"len":9,"clue":"Eco-friendly cars"},{"num":254,"dir":"D","row":19,"col":24,"len":5,"clue":"Les ___-Unis"},{"num":257,"dir":"D","row":19,"col":37,"len":3,"clue":"Clever humor"},{"num":258,"dir":"D","row":19,"col":44,"len":5,"clue":"Colorful part of a flower"},{"num":260,"dir":"D","row":20,"col":6,"len":6,"clue":"Stripped-down lifestyle?"},{"num":262,"dir":"D","row":20,"col":11,"len":3,"clue":"Female deer"},{"num":263,"dir":"D","row":20,"col":17,"len":5,"clue":"Had a bawl"},{"num":264,"dir":"D","row":20,"col":25,"len":5,"clue":"Cut, as lumber"},{"num":266,"dir":"D","row":20,"col":33,"len":5,"clue":"Takes big swigs of"},{"num":268,"dir":"D","row":20,"col":43,"len":3,"clue":"One of the Seven Dwarfs"},{"num":270,"dir":"D","row":21,"col":7,"len":6,"clue":"Brief commercial"},{"num":272,"dir":"D","row":21,"col":16,"len":3,"clue":"What might say \"In 1,000 feet ...\""},{"num":274,"dir":"D","row":21,"col":26,"len":5,"clue":"Female zebras"},{"num":276,"dir":"D","row":21,"col":32,"len":3,"clue":"Outer edge"},{"num":277,"dir":"D","row":21,"col":39,"len":15,"clue":"Gradually begin dozing"},{"num":278,"dir":"D","row":21,"col":40,"len":6,"clue":"Seek, as a political position"},{"num":279,"dir":"D","row":21,"col":46,"len":14,"clue":"Phobia that's difficult to get over"},{"num":280,"dir":"D","row":21,"col":47,"len":13,"clue":"Counterpart of a \"work wife\""},{"num":281,"dir":"D","row":21,"col":48,"len":6,"clue":"Having no talent for"},{"num":282,"dir":"D","row":21,"col":49,"len":6,"clue":"Mistakes"},{"num":285,"dir":"D","row":22,"col":8,"len":5,"clue":"Weapon for a vampire hunter"},{"num":287,"dir":"D","row":22,"col":15,"len":4,"clue":"Female pigs"},{"num":288,"dir":"D","row":22,"col":20,"len":4,"clue":"Beans in edamame and tofu"},{"num":290,"dir":"D","row":22,"col":27,"len":4,"clue":"Smile"},{"num":291,"dir":"D","row":22,"col":31,"len":9,"clue":"Softens by soaking with sugar"},{"num":292,"dir":"D","row":22,"col":38,"len":4,"clue":"Filmmaker Ethan or Joel"},{"num":294,"dir":"D","row":22,"col":45,"len":9,"clue":"Versatile, umami-rich ingredient"},{"num":295,"dir":"D","row":23,"col":0,"len":6,"clue":"Enthusiastically promoted"},{"num":296,"dir":"D","row":23,"col":1,"len":6,"clue":"Handle differently?"},{"num":298,"dir":"D","row":23,"col":9,"len":6,"clue":"Relaxed"},{"num":299,"dir":"D","row":23,"col":13,"len":4,"clue":"\"Veep\" actress DuVall"},{"num":300,"dir":"D","row":23,"col":14,"len":3,"clue":"PC-to-PC connection"},{"num":301,"dir":"D","row":23,"col":21,"len":9,"clue":"The far reaches of the universe"},{"num":303,"dir":"D","row":23,"col":30,"len":9,"clue":"Public rituals of worship"},{"num":304,"dir":"D","row":23,"col":36,"len":4,"clue":"Raggedy ___ (cloth dolls)"},{"num":305,"dir":"D","row":23,"col":37,"len":3,"clue":"Privacy doc"},{"num":306,"dir":"D","row":23,"col":41,"len":5,"clue":"Burning Man accommodations"},{"num":307,"dir":"D","row":23,"col":42,"len":6,"clue":"Website that provides free access to research papers"},{"num":311,"dir":"D","row":24,"col":11,"len":4,"clue":"Trash"},{"num":312,"dir":"D","row":24,"col":12,"len":3,"clue":"Suffix with Sudan or Japan"},{"num":314,"dir":"D","row":24,"col":22,"len":4,"clue":"Take a breather"},{"num":315,"dir":"D","row":24,"col":23,"len":5,"clue":"Clever"},{"num":317,"dir":"D","row":24,"col":29,"len":4,"clue":"Pants, colloquially"},{"num":319,"dir":"D","row":24,"col":34,"len":4,"clue":"Workplace watchdog org."},{"num":320,"dir":"D","row":24,"col":35,"len":3,"clue":"Dubai's country, for short"},{"num":321,"dir":"D","row":24,"col":43,"len":6,"clue":"\"That's a pity\""},{"num":325,"dir":"D","row":25,"col":16,"len":5,"clue":"Turn out"},{"num":327,"dir":"D","row":25,"col":24,"len":5,"clue":"Larsson who wrote \"The Girl With the Dragon Tattoo\""},{"num":329,"dir":"D","row":25,"col":32,"len":5,"clue":"T. rexes, e.g."},{"num":333,"dir":"D","row":26,"col":5,"len":5,"clue":"Single step"},{"num":336,"dir":"D","row":26,"col":17,"len":3,"clue":"Writer Edgar Allan ___"},{"num":338,"dir":"D","row":26,"col":25,"len":5,"clue":"Part of a drum kit"},{"num":340,"dir":"D","row":26,"col":33,"len":3,"clue":"Term of endearment among drag queens"},{"num":344,"dir":"D","row":27,"col":6,"len":3,"clue":"Class for an aspiring bilingual, for short"},{"num":346,"dir":"D","row":27,"col":14,"len":6,"clue":"Impulsive and zany"},{"num":347,"dir":"D","row":27,"col":15,"len":7,"clue":"Settles (up)"},{"num":348,"dir":"D","row":27,"col":20,"len":6,"clue":"Reproductive glands"},{"num":349,"dir":"D","row":27,"col":26,"len":5,"clue":"Like some pianos and juries"},{"num":350,"dir":"D","row":27,"col":27,"len":6,"clue":"Some winter temp workers"},{"num":352,"dir":"D","row":27,"col":37,"len":4,"clue":"Is in debt"},{"num":353,"dir":"D","row":27,"col":38,"len":3,"clue":"In good shape"},{"num":358,"dir":"D","row":28,"col":7,"len":5,"clue":"Broadcast shout-out to a parent"},{"num":359,"dir":"D","row":28,"col":8,"len":4,"clue":"Acronym for an outdoor fantasy game"},{"num":360,"dir":"D","row":28,"col":12,"len":3,"clue":"Above, poetically"},{"num":361,"dir":"D","row":28,"col":13,"len":4,"clue":"Stamp on an invoice"},{"num":362,"dir":"D","row":28,"col":19,"len":9,"clue":"Teal-colored Mountain Dew flavor"},{"num":364,"dir":"D","row":28,"col":28,"len":6,"clue":"Airport surface"},{"num":366,"dir":"D","row":28,"col":35,"len":5,"clue":"Domesticates"},{"num":367,"dir":"D","row":28,"col":36,"len":4,"clue":"Svelte"},{"num":368,"dir":"D","row":28,"col":40,"len":9,"clue":"Chewy tapioca balls"},{"num":370,"dir":"D","row":28,"col":44,"len":4,"clue":"Variety"},{"num":371,"dir":"D","row":28,"col":48,"len":6,"clue":"Recurring action role for Matt Damon"},{"num":372,"dir":"D","row":28,"col":49,"len":5,"clue":"Seeing red"},{"num":373,"dir":"D","row":29,"col":4,"len":7,"clue":"Football snappers"},{"num":374,"dir":"D","row":29,"col":11,"len":9,"clue":"\"Stormy Weather\" singer"},{"num":375,"dir":"D","row":29,"col":18,"len":9,"clue":"Left-leaning, and then some"},{"num":376,"dir":"D","row":29,"col":22,"len":5,"clue":"Auto transmission repair chain"},{"num":378,"dir":"D","row":29,"col":29,"len":10,"clue":"Budget offerings"},{"num":379,"dir":"D","row":29,"col":34,"len":5,"clue":"Fur trader's wares"},{"num":381,"dir":"D","row":30,"col":0,"len":4,"clue":"Jokes"},{"num":382,"dir":"D","row":30,"col":1,"len":8,"clue":"Succulent in skin lotions"},{"num":383,"dir":"D","row":30,"col":2,"len":8,"clue":"Chest bone that doesn't attach to the sternum"},{"num":384,"dir":"D","row":30,"col":3,"len":16,"clue":"Mortgages with relatively quick payoffs"},{"num":386,"dir":"D","row":30,"col":9,"len":6,"clue":"Tests for purity"},{"num":387,"dir":"D","row":30,"col":10,"len":4,"clue":"\"The Simpsons\" bar"},{"num":388,"dir":"D","row":30,"col":17,"len":6,"clue":"Got down at a wedding, say"},{"num":389,"dir":"D","row":30,"col":23,"len":6,"clue":"Cross-promotional stunts"},{"num":391,"dir":"D","row":30,"col":33,"len":13,"clue":"Pancetta or prosciutto"},{"num":393,"dir":"D","row":30,"col":41,"len":3,"clue":"Paving substance"},{"num":394,"dir":"D","row":30,"col":42,"len":4,"clue":"\"Barbie\" actor Liu"},{"num":397,"dir":"D","row":31,"col":6,"len":7,"clue":"Knows someone who knows someone, say"},{"num":399,"dir":"D","row":31,"col":16,"len":4,"clue":"Dial on an amp"},{"num":400,"dir":"D","row":31,"col":24,"len":6,"clue":"Partners on your side"},{"num":402,"dir":"D","row":31,"col":32,"len":5,"clue":"Typeface flourish"},{"num":403,"dir":"D","row":31,"col":38,"len":4,"clue":"Road safety grp."},{"num":404,"dir":"D","row":31,"col":43,"len":9,"clue":"\"That's totally fine!\""},{"num":407,"dir":"D","row":32,"col":5,"len":3,"clue":"Creatures in the video game Stellaris, for short"},{"num":409,"dir":"D","row":32,"col":12,"len":5,"clue":"Some jeans"},{"num":412,"dir":"D","row":32,"col":25,"len":6,"clue":"Like the most protective hazmat gear"},{"num":414,"dir":"D","row":32,"col":31,"len":5,"clue":"___ asada"},{"num":415,"dir":"D","row":32,"col":37,"len":9,"clue":"Mammals investigated as the source of the Covid-19 pandemic"},{"num":416,"dir":"D","row":32,"col":45,"len":4,"clue":"Actor Pitt"},{"num":418,"dir":"D","row":33,"col":8,"len":8,"clue":"Makes stricter"},{"num":419,"dir":"D","row":33,"col":13,"len":11,"clue":"Grammy-winning D.J. with hits like \"Titanium\" and \"Without You\""},{"num":421,"dir":"D","row":33,"col":21,"len":8,"clue":"Accumulates"},{"num":422,"dir":"D","row":33,"col":26,"len":8,"clue":"One symbolized by a donkey"},{"num":424,"dir":"D","row":33,"col":30,"len":5,"clue":"France's third-largest city, in one spelling"},{"num":425,"dir":"D","row":33,"col":36,"len":7,"clue":"French equivalent of \"Dios mío!\""},{"num":427,"dir":"D","row":33,"col":44,"len":7,"clue":"Totally loses it"},{"num":429,"dir":"D","row":34,"col":7,"len":10,"clue":"Hunkers down through an unpleasant situation"},{"num":431,"dir":"D","row":34,"col":14,"len":6,"clue":"Villainous Simon in \"Uncle Tom's Cabin\""},{"num":433,"dir":"D","row":34,"col":20,"len":6,"clue":"Harum-___"},{"num":435,"dir":"D","row":34,"col":27,"len":7,"clue":"Units of force"},{"num":437,"dir":"D","row":34,"col":35,"len":5,"clue":"One variable in calculating the area of a rectangle"},{"num":438,"dir":"D","row":34,"col":41,"len":4,"clue":"Mope"},{"num":440,"dir":"D","row":35,"col":0,"len":3,"clue":"Animation sheet"},{"num":443,"dir":"D","row":35,"col":15,"len":6,"clue":"Items"},{"num":447,"dir":"D","row":35,"col":34,"len":3,"clue":"Fall equinox mo."},{"num":449,"dir":"D","row":35,"col":42,"len":4,"clue":"Warty critter"},{"num":450,"dir":"D","row":35,"col":47,"len":10,"clue":"Curried favor with"},{"num":451,"dir":"D","row":35,"col":48,"len":10,"clue":"\"Ah, back to peace and quiet\""},{"num":452,"dir":"D","row":35,"col":49,"len":5,"clue":"Places for posters"},{"num":454,"dir":"D","row":36,"col":5,"len":6,"clue":"Ryder of \"Stranger Things\""},{"num":455,"dir":"D","row":36,"col":10,"len":3,"clue":"Can. province"},{"num":456,"dir":"D","row":36,"col":16,"len":6,"clue":"Double a duo"},{"num":458,"dir":"D","row":36,"col":22,"len":6,"clue":"Adjusts to, as a thermostat"},{"num":460,"dir":"D","row":36,"col":28,"len":4,"clue":"Certain daily temps"},{"num":462,"dir":"D","row":36,"col":38,"len":6,"clue":"Less at ease"},{"num":464,"dir":"D","row":36,"col":46,"len":10,"clue":"\"Word on the street was ...\""},{"num":466,"dir":"D","row":37,"col":4,"len":4,"clue":"Auditioner's goal"},{"num":467,"dir":"D","row":37,"col":9,"len":3,"clue":"Gerund suffix"},{"num":469,"dir":"D","row":37,"col":17,"len":6,"clue":"Winter Olympics performer"},{"num":471,"dir":"D","row":37,"col":23,"len":6,"clue":"Idly stick around"},{"num":473,"dir":"D","row":37,"col":32,"len":4,"clue":"Brazilian currency"},{"num":474,"dir":"D","row":37,"col":39,"len":5,"clue":"Prolonged attack"},{"num":476,"dir":"D","row":37,"col":45,"len":4,"clue":"\"___ Lisa\""},{"num":479,"dir":"D","row":38,"col":12,"len":6,"clue":"Keg attachment"},{"num":481,"dir":"D","row":38,"col":24,"len":6,"clue":"Spotted wildcat"},{"num":483,"dir":"D","row":38,"col":31,"len":12,"clue":"Impressive-sounding-but-unintelligible jargon"},{"num":485,"dir":"D","row":38,"col":40,"len":5,"clue":"Outlying community"},{"num":487,"dir":"D","row":39,"col":1,"len":6,"clue":"In order that"},{"num":488,"dir":"D","row":39,"col":2,"len":6,"clue":"Person who monitors a message board but never posts"},{"num":489,"dir":"D","row":39,"col":6,"len":4,"clue":"Ponder (over)"},{"num":490,"dir":"D","row":39,"col":11,"len":6,"clue":"German playwright Bertolt"},{"num":491,"dir":"D","row":39,"col":18,"len":5,"clue":"\"Attack,\" to a dog"},{"num":492,"dir":"D","row":39,"col":19,"len":6,"clue":"Captain's chart"},{"num":493,"dir":"D","row":39,"col":25,"len":6,"clue":"Filled with desire, but not romantically"},{"num":494,"dir":"D","row":39,"col":30,"len":5,"clue":"Like many Buffalo winters"},{"num":495,"dir":"D","row":39,"col":34,"len":4,"clue":"\"God ___ the King\""},{"num":497,"dir":"D","row":39,"col":41,"len":11,"clue":"December retrospective, maybe"},{"num":499,"dir":"D","row":40,"col":0,"len":5,"clue":"Baker's supply"},{"num":500,"dir":"D","row":40,"col":10,"len":6,"clue":"Corn chip brand"},{"num":503,"dir":"D","row":40,"col":29,"len":3,"clue":"Colorado native"},{"num":504,"dir":"D","row":40,"col":35,"len":4,"clue":"Monopoly payment"},{"num":506,"dir":"D","row":40,"col":42,"len":5,"clue":"Moon of Saturn"},{"num":510,"dir":"D","row":41,"col":9,"len":9,"clue":"Susceptibility"},{"num":511,"dir":"D","row":41,"col":14,"len":9,"clue":"English translation of the Spanish \"ayer\""},{"num":513,"dir":"D","row":41,"col":20,"len":9,"clue":"\"OK, don't accept my apology then!\""},{"num":515,"dir":"D","row":41,"col":28,"len":9,"clue":"\"I see what you're pointing at now\""},{"num":517,"dir":"D","row":41,"col":36,"len":4,"clue":"Worn-down crayon, e.g."},{"num":519,"dir":"D","row":41,"col":43,"len":9,"clue":"Rhythmic pattern in big band jazz"},{"num":520,"dir":"D","row":41,"col":44,"len":3,"clue":"London's home: Abbr."},{"num":522,"dir":"D","row":41,"col":49,"len":4,"clue":"A single time"},{"num":524,"dir":"D","row":42,"col":4,"len":8,"clue":"Apartment sharer, to a Brit"},{"num":526,"dir":"D","row":42,"col":8,"len":8,"clue":"Taking a break from dating men, in a modern coinage"},{"num":527,"dir":"D","row":42,"col":15,"len":6,"clue":"Sound system"},{"num":529,"dir":"D","row":42,"col":21,"len":7,"clue":"Gets bored with"},{"num":531,"dir":"D","row":42,"col":26,"len":5,"clue":"Unappetizing bowlfuls"},{"num":532,"dir":"D","row":42,"col":27,"len":4,"clue":"Ice planet in \"Star Wars\""},{"num":534,"dir":"D","row":42,"col":37,"len":8,"clue":"Unlikely features of work boots"},{"num":536,"dir":"D","row":42,"col":45,"len":8,"clue":"Deadlocks"},{"num":538,"dir":"D","row":43,"col":5,"len":7,"clue":"Ethical reservation"},{"num":540,"dir":"D","row":43,"col":16,"len":6,"clue":"Achieve something through hard work"},{"num":542,"dir":"D","row":43,"col":22,"len":7,"clue":"Suffix with Euro- or helio-"},{"num":545,"dir":"D","row":43,"col":32,"len":7,"clue":"Most cautious"},{"num":547,"dir":"D","row":43,"col":38,"len":4,"clue":"Commotions"},{"num":548,"dir":"D","row":43,"col":39,"len":3,"clue":"The Cavs, on scoreboards"},{"num":551,"dir":"D","row":44,"col":6,"len":6,"clue":"Deadly"},{"num":554,"dir":"D","row":44,"col":17,"len":6,"clue":"Second of two"},{"num":556,"dir":"D","row":44,"col":23,"len":6,"clue":"___ Nevada"},{"num":559,"dir":"D","row":44,"col":33,"len":4,"clue":"Flat-topped landform"},{"num":560,"dir":"D","row":44,"col":34,"len":6,"clue":"Advanced H.S. science class"},{"num":562,"dir":"D","row":44,"col":40,"len":6,"clue":"Gold bars"},{"num":565,"dir":"D","row":45,"col":7,"len":5,"clue":"Tend to, as a fire"},{"num":566,"dir":"D","row":45,"col":12,"len":5,"clue":"Spanish clay pots"},{"num":567,"dir":"D","row":45,"col":13,"len":5,"clue":"Physicist Alessandro who invented the first battery"},{"num":568,"dir":"D","row":45,"col":18,"len":5,"clue":"___ cold brew"},{"num":570,"dir":"D","row":45,"col":24,"len":5,"clue":"Tennis star Osaka"},{"num":572,"dir":"D","row":45,"col":29,"len":5,"clue":"Kidney-related"},{"num":573,"dir":"D","row":45,"col":30,"len":5,"clue":"Morning, in Marseille"},{"num":574,"dir":"D","row":45,"col":35,"len":5,"clue":"Velvety leather"},{"num":577,"dir":"D","row":45,"col":44,"len":5,"clue":"\"I can do that for you\""},{"num":578,"dir":"D","row":46,"col":0,"len":4,"clue":"Frozen waffle brand"},{"num":579,"dir":"D","row":46,"col":1,"len":4,"clue":"Beach bird"},{"num":580,"dir":"D","row":46,"col":2,"len":4,"clue":"First Nations group"},{"num":582,"dir":"D","row":46,"col":11,"len":4,"clue":"Wall Street neighborhood, colloquially"},{"num":583,"dir":"D","row":46,"col":19,"len":4,"clue":"Sushi wrapper"},{"num":584,"dir":"D","row":46,"col":25,"len":4,"clue":"Figure skater Michelle"},{"num":586,"dir":"D","row":46,"col":36,"len":4,"clue":"Part of the eye"},{"num":588,"dir":"D","row":46,"col":42,"len":4,"clue":"Soviet gymnast Korbut"},{"num":589,"dir":"D","row":46,"col":47,"len":4,"clue":"Postal delivery"},{"num":590,"dir":"D","row":46,"col":48,"len":4,"clue":"\"Hey, don't look ___!\""},{"num":591,"dir":"D","row":46,"col":49,"len":4,"clue":"Manipulates"},{"num":593,"dir":"D","row":47,"col":3,"len":3,"clue":"Sully"},{"num":595,"dir":"D","row":47,"col":27,"len":3,"clue":"Setting not observed in Hawaii: Abbr."},{"num":596,"dir":"D","row":47,"col":39,"len":3,"clue":"Draw"},{"num":597,"dir":"D","row":47,"col":46,"len":3,"clue":"Inbound flight info"}],"layout":["...........#....#......#....#....##....#..........","...........#....#......#..........#....#..........","...........#...........#...............#..........","...#......#...........#................#......#...","###....#.....#..........#.....#.......#........###",".....#........#....##....#.....#....##....#.......",".........#.....##...#.....#.....#..........#......","..........##.....#.........#.....#..........#.....","....#.......#....#....##....#.....#......#...#....","#....##......#.......#.......#.....#....#.........",".......#......#.....#..................#.........#","........#......#...#....#.....##......#....#...###",".........#........#......#....#......#............","....#.....#......#........#.....#.......#....#....","...#.......#.........#.....#.....#.....#....#.....","###....#.......#.....#.....#......#....#.........#","#.......#.....#.......#......#.....#......#.......",".....#.......#.....#...#....#.......#....#........","....#.......#.....#.....#............#......#.....","......#....#.....#.......#.......#.........#......",".......##.......#.........#.....#......##.....####","........#......#....#......#...#......#......#....","##...#...#...##......#........#.....##...##.......",".....#.....##.........##.....#....##.......#......",".....#..........#.......#.......#...........#.....",".....#...........#.......#.......#..........#.....","......#.......##....#.....##.........##.....#.....",".......##...##.....#........#......##...#...#...##","....#......#......#...#......#....#......#........","####.....##......#.....#.........#.......##.......","......#.........#.......#.......#.....#....#......",".....#......#............#.....#.....#.......#....","........#....#.......#....#...#.....#.......#.....",".......#......#.....#......#.......#.....#.......#","#.........#....#......#.....#.....#.......#....###",".....#....#.....#.....#.....#.........#.......#...","....#....#.......#.....#........#......#.....#....","............#......#....#......#........#.........","###...#....#......##.....#....#...#......#........","#.........#..................#.....#......#.......",".........#....#.....#.......#.......#......##....#","....#...#......#.....#....##....#....#.......#....",".....#..........#.....#.........#.....##..........","......#..........#.....#.....#...##.....#.........",".......#....##....#.....#....##....#........#.....","###........#.......#.....#..........#.....#....###","...#......#................#...........#......#...","..........#...............#...........#...........","..........#....#..........#......#....#...........","..........#....##....#....#......#....#..........."],"check":{"salt":"78d21132bcbf751749422f26f92054ef","rounds":50000,"quadrants":[{"name":"NW","label":"Top left","r0":0,"r1":25,"c0":0,"c1":25,"hash":"5cc92ed05f22e10897a11fa0108f07c3c3638bdc509afef4ca22708b5209fd25"},{"name":"NE","label":"Top right","r0":0,"r1":25,"c0":25,"c1":50,"hash":"982c493b78b27fb0d180a3ff9413c427a47d3207098f8846e9c7f2267796688e"},{"name":"SW","label":"Bottom left","r0":25,"r1":50,"c0":0,"c1":25,"hash":"011ed89fb850ec4b1ff90117928ebf3cf6f813f5bb1d430f6b93d89f9d75ee25"},{"name":"SE","label":"Bottom right","r0":25,"r1":50,"c0":25,"c1":50,"hash":"27c4a9c9aef7457a1de41e821dbb6cf513c72d25b7299427da8a98ce7e4469db"}]}};
+const CELL = 33;
+const W = PUZZLE.width, H = PUZZLE.height;
+const STORE_KEY = 'xw-play:' + PUZZLE.title + ':' + PUZZLE.date;
+const QUADS = PUZZLE.check.quadrants;
+
+let fill = [];
+let cur = null;
+let dir = 'A';
+let CELL_ENTRY = null;
+let litCells = new Set();
+let litClues = [];
+let quadResult = QUADS.map(() => null);
+let wasFull = false;
+
+const SHA256 = (() => {
+    const K = new Uint32Array(64), H0 = new Uint32Array(8);
+    let n = 0;
+    for (let cand = 2; n < 64; cand++) {
+        let prime = true;
+        for (let d = 2; d * d <= cand; d++) {
+            if (cand % d === 0) {
+                prime = false;
+                break;
+            }
+        }
+        if (!prime) {
+            continue;
+        }
+        if (n < 8) {
+            H0[n] = ((Math.pow(cand, 1 / 2) % 1) * 4294967296) >>> 0;
+        }
+        K[n] = ((Math.pow(cand, 1 / 3) % 1) * 4294967296) >>> 0;
+        n++;
+    }
+    const Wd = new Uint32Array(64);
+    return function (msg) {
+        const len = msg.length;
+        const total = ((len + 9 + 63) >> 6) << 6;
+        const buf = new Uint8Array(total);
+        buf.set(msg);
+        buf[len] = 0x80;
+        const dv = new DataView(buf.buffer);
+        dv.setUint32(total - 4, (len * 8) >>> 0);
+        dv.setUint32(total - 8, Math.floor(len / 536870912));
+        let h0 = H0[0], h1 = H0[1], h2 = H0[2], h3 = H0[3], h4 = H0[4], h5 = H0[5], h6 = H0[6], h7 = H0[7];
+        for (let off = 0; off < total; off += 64) {
+            for (let i = 0; i < 16; i++) {
+                Wd[i] = dv.getUint32(off + i * 4);
+            }
+            for (let i = 16; i < 64; i++) {
+                const x = Wd[i - 15], y = Wd[i - 2];
+                const s0 = ((x >>> 7) | (x << 25)) ^ ((x >>> 18) | (x << 14)) ^ (x >>> 3);
+                const s1 = ((y >>> 17) | (y << 15)) ^ ((y >>> 19) | (y << 13)) ^ (y >>> 10);
+                Wd[i] = Wd[i - 16] + s0 + Wd[i - 7] + s1;
+            }
+            let a = h0, b = h1, c = h2, d = h3, e = h4, f = h5, g = h6, h = h7;
+            for (let i = 0; i < 64; i++) {
+                const S1 = ((e >>> 6) | (e << 26)) ^ ((e >>> 11) | (e << 21)) ^ ((e >>> 25) | (e << 7));
+                const t1 = (h + S1 + ((e & f) ^ (~e & g)) + K[i] + Wd[i]) | 0;
+                const S0 = ((a >>> 2) | (a << 30)) ^ ((a >>> 13) | (a << 19)) ^ ((a >>> 22) | (a << 10));
+                const t2 = (S0 + ((a & b) ^ (a & c) ^ (b & c))) | 0;
+                h = g; g = f; f = e; e = (d + t1) | 0; d = c; c = b; b = a; a = (t1 + t2) | 0;
+            }
+            h0 = (h0 + a) | 0; h1 = (h1 + b) | 0; h2 = (h2 + c) | 0; h3 = (h3 + d) | 0;
+            h4 = (h4 + e) | 0; h5 = (h5 + f) | 0; h6 = (h6 + g) | 0; h7 = (h7 + h) | 0;
+        }
+        const out = new Uint8Array(32);
+        const odv = new DataView(out.buffer);
+        [h0, h1, h2, h3, h4, h5, h6, h7].forEach((v, i) => odv.setUint32(i * 4, v >>> 0));
+        return out;
+    };
+})();
+
+function slowHash(text, rounds) {
+    let h = SHA256(new TextEncoder().encode(text));
+    for (let i = 1; i < rounds; i++) {
+        h = SHA256(h);
+    }
+    return Array.from(h, b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function key(r, c) {
+    return r + ',' + c;
+}
+
+function isWhite(r, c) {
+    return r >= 0 && r < H && c >= 0 && c < W && PUZZLE.layout[r][c] !== '#';
+}
+
+function entryCells(e) {
+    const cells = [];
+    for (let i = 0; i < e.len; i++) {
+        cells.push(e.dir === 'A' ? [e.row, e.col + i] : [e.row + i, e.col]);
+    }
+    return cells;
+}
+
+function escapeHtml(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function quadOf(r, c) {
+    return QUADS.findIndex(q => r >= q.r0 && r < q.r1 && c >= q.c0 && c < q.c1);
+}
+
+function loadProgress() {
+    try {
+        const s = JSON.parse(localStorage.getItem(STORE_KEY));
+        if (!s || !Array.isArray(s.fill) || s.fill.length !== H) {
+            return;
+        }
+        for (let r = 0; r < H; r++) {
+            for (let c = 0; c < W; c++) {
+                const ch = (s.fill[r] || '')[c] || '';
+                fill[r][c] = (isWhite(r, c) && /^[A-Z]$/.test(ch)) ? ch : '';
+            }
+        }
+        if (s.cur && isWhite(s.cur.r, s.cur.c)) {
+            cur = {r: s.cur.r, c: s.cur.c};
+        }
+        if (s.dir === 'A' || s.dir === 'D') {
+            dir = s.dir;
+        }
+    } catch (e) {
+        
+    }
+}
+
+function saveProgress() {
+    const note = document.getElementById('savenote');
+    try {
+        localStorage.setItem(STORE_KEY, JSON.stringify({
+            fill: fill.map(row => row.map(ch => ch || '.').join('')),
+            cur: cur,
+            dir: dir,
+            saved: Date.now(),
+        }));
+        note.textContent = 'Progress is saved in this browser.';
+    } catch (e) {
+        note.textContent = 'Progress can\'t be saved in this browser.';
+    }
+}
+
+function build() {
+    CELL_ENTRY = [];
+    for (let r = 0; r < H; r++) {
+        CELL_ENTRY.push([]);
+        fill.push([]);
+        for (let c = 0; c < W; c++) {
+            CELL_ENTRY[r].push({});
+            fill[r].push('');
+        }
+    }
+    const numbers = {};
+    PUZZLE.entries.forEach((e, i) => {
+        for (const [r, c] of entryCells(e)) {
+            CELL_ENTRY[r][c][e.dir] = i;
+        }
+        numbers[key(e.row, e.col)] = e.num;
+    });
+
+    let html = '';
+    html += '<svg id="board" class="Board" preserveAspectRatio="xMidYMin meet" ';
+    html += 'xmlns="http://www.w3.org/2000/svg" ';
+    html += 'viewBox="0 0 ' + (W * CELL + 6) + ' ' + (H * CELL + 6) + '">';
+    html += '<g data-group="cells">';
+    for (let r = 0; r < H; r++) {
+        const y = 3 + CELL * r;
+        for (let c = 0; c < W; c++) {
+            const x = 3 + CELL * c;
+            if (!isWhite(r, c)) {
+                html += '<rect x="' + x + '" y="' + y + '" width="33" height="33"></rect>';
+                continue;
+            }
+            const k = key(r, c);
+            html += '<g data-key="' + k + '">';
+            html += '<rect id="c' + k + '" class="Cell" x="' + x + '" y="' + y + '" width="33" height="33"></rect>';
+            if (numbers[k] !== undefined) {
+                html += '<text x="' + (x + 2) + '" y="' + (y + 11.5) + '" text-anchor="start" font-size="11">' + numbers[k] + '</text>';
+            }
+            html += '<text id="t' + k + '" x="' + (x + 16.5) + '" y="' + (y + 30.25) + '" text-anchor="middle" font-size="22"></text>';
+            html += '</g>';
+        }
+    }
+    html += '</g>';
+    html += '<g pointer-events="none">';
+    QUADS.forEach((q, i) => {
+        html += '<rect id="q' + i + '" class="qmark" x="' + (3 + CELL * q.c0) + '" y="' + (3 + CELL * q.r0) + '" ';
+        html += 'width="' + (CELL * (q.c1 - q.c0)) + '" height="' + (CELL * (q.r1 - q.r0)) + '"></rect>';
+    });
+    html += '</g>';
+    let path = '';
+    for (let x = 1; x < W; x++) {
+        path += 'M' + (x * CELL + 3) + ',3l0,' + (H * CELL);
+    }
+    for (let y = 1; y < H; y++) {
+        path += 'M3,' + (y * CELL + 3) + 'l' + (W * CELL) + ',0';
+    }
+    const midX = 3 + CELL * QUADS[1].c0, midY = 3 + CELL * QUADS[2].r0;
+    html += '<g data-group="grid" pointer-events="none">';
+    html += '<path d="' + path + '" stroke="dimgray" vector-effect="non-scaling-stroke"></path>';
+    html += '<path d="M' + midX + ',3l0,' + (H * CELL) + 'M3,' + midY + 'l' + (W * CELL) + ',0" ';
+    html += 'stroke="#3a7bd5" stroke-width="2" vector-effect="non-scaling-stroke"></path>';
+    html += '<rect x="1.50" y="1.50" width="' + (W * CELL + 3) + '" height="' + (H * CELL + 3) + '" ';
+    html += 'stroke="black" stroke-width="3" fill="none"></rect>';
+    html += '</g></svg>';
+    document.getElementById('boardWrap').innerHTML = html;
+
+    document.getElementById('board').addEventListener('click', ev => {
+        const g = ev.target.closest('g[data-key]');
+        if (!g) {
+            return;
+        }
+        const [r, c] = g.dataset.key.split(',').map(Number);
+        if (cur && cur.r === r && cur.c === c) {
+            toggleDir();
+        } else {
+            cur = {r: r, c: c};
+            if (CELL_ENTRY[r][c][dir] === undefined) {
+                dir = (dir === 'A') ? 'D' : 'A';
+            }
+            refreshSelection();
+        }
+        focusKeyboard();
+    });
+
+    for (const d of ['A', 'D']) {
+        let list = '';
+        PUZZLE.entries.forEach((e, i) => {
+            if (e.dir !== d) {
+                return;
+            }
+            list += '<div class="ClueCell" id="a' + i + '" data-idx="' + i + '">';
+            list += '<span class="num">' + e.num + '</span>';
+            list += e.clue ? escapeHtml(e.clue) : '<span class="noclue">-</span>';
+            list += '</div>';
+        });
+        const box = document.getElementById(d === 'A' ? 'across' : 'down');
+        box.innerHTML = list;
+        box.addEventListener('click', ev => {
+            const div = ev.target.closest('[data-idx]');
+            if (div) {
+                selectEntry(Number(div.dataset.idx));
+                focusKeyboard();
+            }
+        });
+    }
+
+    document.getElementById('title').innerText = PUZZLE.title;
+    const when = new Date(PUZZLE.date + 'T12:00:00').toLocaleDateString(undefined, {year: 'numeric', month: 'long', day: 'numeric'});
+    document.getElementById('byline').innerText = 'by ' + PUZZLE.author + ' / ' + when;
+    document.getElementById('note').innerText = PUZZLE.note || '';
+}
+
+function drawCell(r, c) {
+    document.getElementById('t' + key(r, c)).textContent = fill[r][c];
+}
+
+function currentEntry() {
+    if (!cur) {
+        return null;
+    }
+    if (CELL_ENTRY[cur.r][cur.c][dir] === undefined) {
+        dir = (dir === 'A') ? 'D' : 'A';
+    }
+    return CELL_ENTRY[cur.r][cur.c][dir];
+}
+
+function scrollWithin(box, el) {
+    const top = el.offsetTop;
+    if (top < box.scrollTop) {
+        box.scrollTop = top;
+    } else if (top + el.offsetHeight > box.scrollTop + box.clientHeight) {
+        box.scrollTop = top + el.offsetHeight - box.clientHeight;
+    }
+}
+
+function refreshSelection() {
+    const want = new Map();
+    const e = currentEntry();
+    if (e !== null && e !== undefined) {
+        for (const [r, c] of entryCells(PUZZLE.entries[e])) {
+            want.set(key(r, c), 'CellWord');
+        }
+        want.set(key(cur.r, cur.c), 'CellCur');
+    }
+    for (const k of litCells) {
+        if (!want.has(k)) {
+            document.getElementById('c' + k).setAttribute('class', 'Cell');
+        }
+    }
+    for (const [k, cls] of want) {
+        document.getElementById('c' + k).setAttribute('class', cls);
+    }
+    litCells = new Set(want.keys());
+
+    for (const i of litClues) {
+        document.getElementById('a' + i).className = 'ClueCell';
+    }
+    litClues = [];
+    const bar = document.getElementById('cluebar');
+    if (e === null || e === undefined) {
+        bar.innerHTML = '<span class="noclue">Click a square and type. Space: switch direction. Tab: next clue.</span>';
+        return;
+    }
+    const other = CELL_ENTRY[cur.r][cur.c][dir === 'A' ? 'D' : 'A'];
+    if (other !== undefined) {
+        const div = document.getElementById('a' + other);
+        div.className = 'ClueCellCross';
+        scrollWithin(div.parentElement, div);
+        litClues.push(other);
+    }
+    const div = document.getElementById('a' + e);
+    div.className = 'ClueCellCur';
+    scrollWithin(div.parentElement, div);
+    litClues.push(e);
+    const ent = PUZZLE.entries[e];
+    bar.innerHTML = '<b>' + ent.num + ' ' + (ent.dir === 'A' ? 'Across' : 'Down') + '</b> ' +
+        (ent.clue ? escapeHtml(ent.clue) : '<span class="noclue">-</span>');
+    keepCellVisible();
+}
+
+function keepCellVisible() {
+    const wrap = document.getElementById('boardWrap');
+    if (!cur || wrap.scrollWidth <= wrap.clientWidth) {
+        return;
+    }
+    const scale = document.getElementById('board').getBoundingClientRect().width / (W * CELL + 6);
+    const left = (3 + CELL * cur.c) * scale, right = left + CELL * scale;
+    if (left < wrap.scrollLeft) {
+        wrap.scrollLeft = left - CELL * scale;
+    } else if (right > wrap.scrollLeft + wrap.clientWidth) {
+        wrap.scrollLeft = right - wrap.clientWidth + CELL * scale;
+    }
+}
+
+function cellChanged(r, c) {
+    drawCell(r, c);
+    const q = quadOf(r, c);
+    if (q >= 0 && quadResult[q]) {
+        quadResult[q] = null;
+    }
+    updateQuads();
+    document.getElementById('message').textContent = '';
+    document.getElementById('message').className = '';
+}
+
+function setLetter(ch) {
+    if (!cur) {
+        return;
+    }
+    fill[cur.r][cur.c] = ch;
+    cellChanged(cur.r, cur.c);
+    const [dr, dc] = (dir === 'A') ? [0, 1] : [1, 0];
+    if (isWhite(cur.r + dr, cur.c + dc)) {
+        cur = {r: cur.r + dr, c: cur.c + dc};
+    }
+    refreshSelection();
+    saveProgress();
+    autoCheck();
+}
+
+function backspace() {
+    if (!cur) {
+        return;
+    }
+    if (!fill[cur.r][cur.c]) {
+        const [dr, dc] = (dir === 'A') ? [0, 1] : [1, 0];
+        if (isWhite(cur.r - dr, cur.c - dc)) {
+            cur = {r: cur.r - dr, c: cur.c - dc};
+        }
+    }
+    fill[cur.r][cur.c] = '';
+    cellChanged(cur.r, cur.c);
+    refreshSelection();
+    saveProgress();
+}
+
+function clearCell() {
+    if (cur) {
+        fill[cur.r][cur.c] = '';
+        cellChanged(cur.r, cur.c);
+        saveProgress();
+    }
+}
+
+function toggleDir() {
+    if (!cur) {
+        return;
+    }
+    const other = (dir === 'A') ? 'D' : 'A';
+    if (CELL_ENTRY[cur.r][cur.c][other] !== undefined) {
+        dir = other;
+    }
+    refreshSelection();
+    saveProgress();
+}
+
+function move(dr, dc) {
+    if (!cur) {
+        return;
+    }
+    const want = (dc !== 0) ? 'A' : 'D';
+    if (dir !== want && CELL_ENTRY[cur.r][cur.c][want] !== undefined) {
+        dir = want;
+    } else {
+        let r = cur.r + dr, c = cur.c + dc;
+        while (r >= 0 && r < H && c >= 0 && c < W && !isWhite(r, c)) {
+            r += dr;
+            c += dc;
+        }
+        if (!isWhite(r, c)) {
+            return;
+        }
+        cur = {r: r, c: c};
+        if (CELL_ENTRY[r][c][want] !== undefined) {
+            dir = want;
+        }
+    }
+    refreshSelection();
+    saveProgress();
+}
+
+function selectEntry(i) {
+    const e = PUZZLE.entries[i];
+    const cells = entryCells(e);
+    const target = cells.find(([r, c]) => !fill[r][c]) || cells[0];
+    dir = e.dir;
+    cur = {r: target[0], c: target[1]};
+    refreshSelection();
+    saveProgress();
+}
+
+function jumpEntry(step) {
+    const n = PUZZLE.entries.length;
+    const e = currentEntry();
+    const from = (e === null || e === undefined) ? (step > 0 ? -1 : 0) : e;
+    selectEntry((from + step + n) % n);
+}
+
+function focusKeyboard() {
+    const kb = document.getElementById('kb');
+    try {
+        kb.focus({preventScroll: true});
+    } catch (e) {
+        kb.focus();
+    }
+    if (kb.value !== ' ') {
+        kb.value = ' ';
+    }
+}
+
+function clearAll() {
+    if (!confirm('Clear all squares?')) {
+        return;
+    }
+    for (let r = 0; r < H; r++) {
+        for (let c = 0; c < W; c++) {
+            if (isWhite(r, c)) {
+                fill[r][c] = '';
+                drawCell(r, c);
+            }
+        }
+    }
+    quadResult = QUADS.map(() => null);
+    wasFull = false;
+    updateQuads();
+    document.getElementById('message').textContent = '';
+    document.getElementById('message').className = '';
+    saveProgress();
+}
+
+function quadLetters(q) {
+    let letters = '', empty = 0;
+    for (let r = q.r0; r < q.r1; r++) {
+        for (let c = q.c0; c < q.c1; c++) {
+            if (isWhite(r, c)) {
+                if (fill[r][c]) {
+                    letters += fill[r][c];
+                } else {
+                    empty++;
+                }
+            }
+        }
+    }
+    return [letters, empty];
+}
+
+function updateQuads() {
+    QUADS.forEach((q, i) => {
+        const [, empty] = quadLetters(q);
+        const box = document.getElementById('quad' + i);
+        const mark = document.getElementById('q' + i);
+        const res = quadResult[i];
+        let text = q.label, cls = 'quad';
+        if (res === 'ok') {
+            text += ' \u2713';
+            cls += ' ok';
+        } else if (res === 'bad') {
+            text += ' \u2717';
+            cls += ' bad';
+        } else if (empty) {
+            text += ': ' + empty + ' empty';
+        }
+        box.textContent = text;
+        box.className = cls;
+        mark.setAttribute('class', 'qmark' + (res ? ' ' + res : ''));
+    });
+}
+
+function runCheck() {
+    QUADS.forEach((q, i) => {
+        const [letters, empty] = quadLetters(q);
+        if (empty) {
+            quadResult[i] = null;
+        } else {
+            const h = slowHash(PUZZLE.check.salt + '|' + q.name + '|' + letters, PUZZLE.check.rounds);
+            quadResult[i] = (h === q.hash) ? 'ok' : 'bad';
+        }
+    });
+    updateQuads();
+    const msg = document.getElementById('message');
+    const solved = quadResult.every(r => r === 'ok');
+    msg.textContent = solved ? 'Solved!' : (quadResult.some(r => r) ? '' : 'Fill a quarter to check it.');
+    msg.className = solved ? 'solved' : '';
+}
+
+function checkAll() {
+    document.getElementById('message').textContent = 'Checking...';
+    document.getElementById('message').className = '';
+    setTimeout(runCheck, 20);
+}
+
+function autoCheck() {
+    const full = QUADS.every(q => quadLetters(q)[1] === 0);
+    if (full && !wasFull) {
+        checkAll();
+    }
+    wasFull = full;
+}
+
+function downloadBlob(data, fileName, mimeType) {
+    const blob = new Blob([data], {type: mimeType});
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.style.display = 'none';
+    a.click();
+    a.remove();
+    setTimeout(() => window.URL.revokeObjectURL(url), 1000);
+}
+
+function downloadPuz() {
+    const p = {
+        "width": W,
+        "height": H,
+        "fileVersion": "1.2c",
+        "title": puz.cleanString(PUZZLE.title),
+        "author": puz.cleanString(PUZZLE.author),
+        "notepad": puz.cleanString(PUZZLE.note || ''),
+        "solution": "",
+        "state": "",
+        "clues": [],
+    };
+    const starts = {};
+    for (const e of PUZZLE.entries) {
+        const k = key(e.row, e.col);
+        starts[k] = starts[k] || {};
+        starts[k][e.dir] = e;
+    }
+    for (let r = 0; r < H; r++) {
+        for (let c = 0; c < W; c++) {
+            if (!isWhite(r, c)) {
+                p.solution += '.';
+                p.state += '.';
+                continue;
+            }
+            p.solution += fill[r][c] || 'X';
+            p.state += '-';
+            const here = starts[key(r, c)] || {};
+            for (const d of ['A', 'D']) {
+                if (here[d]) {
+                    p.clues.push(puz.cleanString(here[d].clue || '-'));
+                }
+            }
+        }
+    }
+    downloadBlob(puz.printBinaryFile(p), PUZZLE.title + ' ' + PUZZLE.date + '.puz', 'application/octet-stream');
+}
+
+function applyZoom() {
+    let px = parseInt(document.getElementById('zoom').value, 10);
+    if (!px) {
+        const avail = Math.max(300, window.innerWidth - 32 - (window.innerWidth > 1300 ? 2 * 302 : 0));
+        px = Math.max(8, Math.min(26, Math.floor(avail / W)));
+    }
+    const board = document.getElementById('board');
+    const w = px * W;
+    const h = w * (H * CELL + 6) / (W * CELL + 6);
+    board.style.width = w + 'px';
+    board.style.height = h + 'px';
+    for (const id of ['across', 'down']) {
+        document.getElementById(id).style.maxHeight = Math.max(300, Math.round(h) - 24) + 'px';
+    }
+    keepCellVisible();
+}
+
+document.addEventListener('keydown', ev => {
+    if (ev.ctrlKey || ev.metaKey || ev.altKey || !cur) {
+        return;
+    }
+    const k = ev.key;
+    if (ev.target && (ev.target.tagName === 'SELECT' || (ev.target.tagName === 'BUTTON' && (k === ' ' || k === 'Enter')))) {
+        return;
+    }
+    let handled = true;
+    if (/^[a-zA-Z]$/.test(k)) {
+        setLetter(k.toUpperCase());
+    } else if (k === 'Backspace') {
+        backspace();
+    } else if (k === 'Delete') {
+        clearCell();
+    } else if (k === 'ArrowLeft') {
+        move(0, -1);
+    } else if (k === 'ArrowRight') {
+        move(0, 1);
+    } else if (k === 'ArrowUp') {
+        move(-1, 0);
+    } else if (k === 'ArrowDown') {
+        move(1, 0);
+    } else if (k === 'Tab' || k === 'Enter') {
+        jumpEntry(ev.shiftKey ? -1 : 1);
+    } else if (k === ' ') {
+        toggleDir();
+    } else if (k === 'Escape') {
+        cur = null;
+        refreshSelection();
+    } else {
+        handled = false;
+    }
+    if (handled) {
+        ev.preventDefault();
+    }
+});
+
+window.addEventListener('resize', () => {
+    if (document.getElementById('zoom').value === '0') {
+        applyZoom();
+    }
+});
+
+document.addEventListener('DOMContentLoaded', () => {
+    build();
+    loadProgress();
+    for (let r = 0; r < H; r++) {
+        for (let c = 0; c < W; c++) {
+            if (isWhite(r, c)) {
+                drawCell(r, c);
+            }
+        }
+    }
+    wasFull = QUADS.every(q => quadLetters(q)[1] === 0);
+    applyZoom();
+    updateQuads();
+    refreshSelection();
+    try {
+        localStorage.getItem(STORE_KEY);
+        document.getElementById('savenote').textContent = 'Progress is saved in this browser.';
+    } catch (e) {
+        document.getElementById('savenote').textContent = 'Progress can\'t be saved in this browser.';
+    }
+
+    const kb = document.getElementById('kb');
+    kb.value = ' ';
+    kb.addEventListener('beforeinput', ev => {
+        if (ev.inputType && ev.inputType.startsWith('delete')) {
+            ev.preventDefault();
+            backspace();
+        } else if (ev.data) {
+            ev.preventDefault();
+            for (const ch of ev.data.toUpperCase().replace(/[^A-Z]/g, '')) {
+                setLetter(ch);
+            }
+        }
+    });
+    kb.addEventListener('input', () => {
+        const letters = kb.value.toUpperCase().replace(/[^A-Z]/g, '');
+        kb.value = ' ';
+        for (const ch of letters) {
+            setLetter(ch);
+        }
+    });
+});
+</script>
+</head>
+<body>
+    <input id="kb" type="text" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" aria-label="Crossword input">
+    <div id="header">
+        <span class="title" id="title"></span>
+        <span class="byline" id="byline"></span>
+        <span class="stats">
+            <select id="zoom" onchange="applyZoom();">
+                <option value="0">Fit</option>
+                <option value="12">Small</option>
+                <option value="18">Medium</option>
+                <option value="24">Large</option>
+                <option value="33">Huge</option>
+            </select>
+        </span>
+    </div>
+    <div class="note" id="note"></div>
+    <div id="cluebar"></div>
+    <div class="layout">
+        <div>
+            <div id="boardWrap"></div>
+            <div id="controls">
+                <button onclick="checkAll();">Check</button>
+                <span id="quads">
+                    <span class="quad" id="quad0"></span>
+                    <span class="quad" id="quad1"></span>
+                    <span class="quad" id="quad2"></span>
+                    <span class="quad" id="quad3"></span>
+                </span>
+                <button onclick="clearAll();" style="margin-left:auto">Clear</button>
+                <button onclick="downloadPuz();">Download .puz</button>
+            </div>
+            <div id="message"></div>
+            <div class="stats" id="savenote"></div>
+        </div>
+        <div class="clueCol">
+            <div class="clueHead">Across</div>
+            <div class="clues" id="across"></div>
+        </div>
+        <div class="clueCol">
+            <div class="clueHead">Down</div>
+            <div class="clues" id="down"></div>
+        </div>
+    </div>
+</body>
+</html>
